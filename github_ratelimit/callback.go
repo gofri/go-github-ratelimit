@@ -7,7 +7,7 @@ import (
 )
 
 // CallbackContext is passed to all callbacks.
-// Fields might be nillable, depending on the specific callback.
+// Fields might be nillable, depending on the specific callback and field.
 type CallbackContext struct {
 	UserContext    *context.Context
 	RoundTripper   *SecondaryRateLimitWaiter
