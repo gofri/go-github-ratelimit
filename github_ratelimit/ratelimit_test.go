@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gofri/go-github-ratelimit/github_ratelimit/github_ratelimit_test"
-	"github.com/stretchr/testify/require"
 )
 
 type nopServer struct {
@@ -41,7 +40,9 @@ func setupInjecter(t *testing.T, every time.Duration, sleep time.Duration) http.
 		Sleep: sleep,
 	}
 	i, err := github_ratelimit_test.NewRateLimitInjecter(&nopServer{}, &options)
-	require.Nil(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	return i
 }
@@ -60,7 +61,9 @@ func TestSecondaryRateLimit(t *testing.T) {
 
 	i := setupInjecter(t, every, sleep)
 	c, err := NewRateLimitWaiterClient(i, WithLimitDetectedCallback(callback))
-	require.Nil(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var gw sync.WaitGroup
 	gw.Add(requests)
@@ -82,9 +85,13 @@ func TestSecondaryRateLimit(t *testing.T) {
 	// expect a low number of abuse attempts, i.e.,
 	// not a lot of "slipped" messages due to race conditions.
 	asInjecter, ok := i.(*github_ratelimit_test.SecondaryRateLimitInjecter)
-	require.True(t, ok)
+	if !ok {
+		t.Fatal()
+	}
 	const maxAbuseAttempts = 10
-	require.LessOrEqual(t, asInjecter.AbuseAttempts, maxAbuseAttempts)
+	if real, max := asInjecter.AbuseAttempts, maxAbuseAttempts; real > max {
+		t.Fatal(real, max)
+	}
 }
 
 func TestSingleSleepLimit(t *testing.T) {
@@ -105,7 +112,9 @@ func TestSingleSleepLimit(t *testing.T) {
 	c, err := NewRateLimitWaiterClient(i,
 		WithLimitDetectedCallback(callback),
 		WithSingleSleepLimit(5*time.Second, onLimitExceeded))
-	require.Nil(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// initialize injecter timing
 	_, _ = c.Get("/")
@@ -113,9 +122,12 @@ func TestSingleSleepLimit(t *testing.T) {
 
 	// attempt during rate limit
 	_, err = c.Get("/")
-	require.Nil(t, err)
-	require.True(t, slept)
-	require.False(t, exceeded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slept || exceeded {
+		t.Fatal(slept, exceeded)
+	}
 
 	// test sleep is too long
 	slept = false
@@ -123,7 +135,9 @@ func TestSingleSleepLimit(t *testing.T) {
 	c, err = NewRateLimitWaiterClient(i,
 		WithLimitDetectedCallback(callback),
 		WithSingleSleepLimit(sleep/2, onLimitExceeded))
-	require.Nil(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// initialize injecter timing
 	_, _ = c.Get("/")
@@ -131,10 +145,15 @@ func TestSingleSleepLimit(t *testing.T) {
 
 	// attempt during rate limit
 	resp, err := c.Get("/")
-	require.Nil(t, err)
-	require.False(t, slept) // expect not to sleep because it is beyond the limit
-	require.Equal(t, fmt.Sprintf("%v", sleep.Seconds()), resp.Header.Get("Retry-After"))
-	require.True(t, exceeded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slept || !exceeded {
+		t.Fatal(err)
+	}
+	if got, want := resp.Header.Get("Retry-After"), fmt.Sprintf("%v", sleep.Seconds()); got != want {
+		t.Fatal(got, want)
+	}
 }
 
 func TestTotalSleepLimit(t *testing.T) {
@@ -155,7 +174,9 @@ func TestTotalSleepLimit(t *testing.T) {
 	c, err := NewRateLimitWaiterClient(i,
 		WithLimitDetectedCallback(callback),
 		WithTotalSleepLimit(time.Second+time.Second/2, onLimitExceeded))
-	require.Nil(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// initialize injecter timing
 	_, _ = c.Get("/")
@@ -163,16 +184,24 @@ func TestTotalSleepLimit(t *testing.T) {
 
 	// attempt during rate limit - sleep is still short enough
 	_, err = c.Get("/")
-	require.Nil(t, err)
-	require.True(t, slept)
-	require.False(t, exceeded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slept || exceeded {
+		t.Fatal(slept, exceeded)
+	}
 
 	// test sleep is too long
 	slept = false
 	waitForNextSleep(i)
 	resp, err := c.Get("/")
-	require.Nil(t, err)
-	require.False(t, slept) // expect not to sleep because it is beyond the limit now
-	require.True(t, exceeded)
-	require.Equal(t, fmt.Sprintf("%v", sleep.Seconds()), resp.Header.Get("Retry-After"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slept || !exceeded {
+		t.Fatal(slept, exceeded)
+	}
+	if got, want := resp.Header.Get("Retry-After"), fmt.Sprintf("%v", sleep.Seconds()); got != want {
+		t.Fatal(got, want)
+	}
 }
