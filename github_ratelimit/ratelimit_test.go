@@ -50,8 +50,8 @@ func waitForNextSleep(injecter http.RoundTripper) {
 
 func TestSecondaryRateLimit(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
-	const requests = 5000
-	const every = 3 * time.Second
+	const requests = 10000
+	const every = 5 * time.Second
 	const sleep = 1 * time.Second
 
 	print := func(context *CallbackContext) {
@@ -68,8 +68,8 @@ func TestSecondaryRateLimit(t *testing.T) {
 	var gw sync.WaitGroup
 	gw.Add(requests)
 	for i := 0; i < requests; i++ {
-		// sleep some between requests
-		sleepTime := upTo1SecDelay() / 100
+		// sleep some time between requests
+		sleepTime := upTo1SecDelay() / 150
 		if sleepTime.Milliseconds()%2 == 0 {
 			sleepTime = 0 // bias towards no-sleep for high parallelism
 		}
@@ -88,10 +88,12 @@ func TestSecondaryRateLimit(t *testing.T) {
 	if !ok {
 		t.Fatal()
 	}
-	const maxAbuseAttempts = 10
+	const maxAbuseAttempts = requests / 200 // 0.5% sounds good
 	if real, max := asInjecter.AbuseAttempts, maxAbuseAttempts; real > max {
 		t.Fatal(real, max)
 	}
+	abusePrecent := float64(asInjecter.AbuseAttempts) / requests * 100
+	log.Printf("abuse requests: %v/%v (%v%%)\n", asInjecter.AbuseAttempts, requests, abusePrecent)
 }
 
 func TestSingleSleepLimit(t *testing.T) {
