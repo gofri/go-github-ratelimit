@@ -38,5 +38,5 @@ The RoundTripper accepts a set of optional callbacks:
 - On Total Limit Exceeded: callback for when a rate limit that exceeds the total sleep limit is detected.
 
 ## License
-This package is distributed under the MIT license found int he LICENSE file.  
+This package is distributed under the MIT license found in the LICENSE file.  
 Contribution and feedback is welcome.
