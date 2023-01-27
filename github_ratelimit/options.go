@@ -1,25 +1,11 @@
 package github_ratelimit
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type Option func(*SecondaryRateLimitWaiter)
-
-// OnLimitDetected is a callback to be called when a new rate limit is detected (before the sleep)
-// The totalSleepTime includes the sleep time for the upcoming sleep
-// Note: called while holding the lock.
-type OnLimitDetected func(sleepUntil time.Time, totalSleepTime time.Duration)
-
-// OnSingleLimitPassed is a callback to be called when a rate limit is exceeding the limit for a single sleep.
-// The sleepUntil represents the end of sleep time if the limit was not exceeded.
-// The totalSleepTime does not include the sleep (that is not going to happen).
-// Note: called while holding the lock.
-type OnSingleLimitExceeded func(sleepUntil time.Time, totalSleepTime time.Duration)
-
-// OnTotalLimitExceeded is a callback to be called when a rate limit is exceeding the limit for the total sleep.
-// The sleepUntil represents the end of sleep time if the limit was not exceeded.
-// The totalSleepTime does not include the sleep (that is not going to happen).
-// Note: called while holding the lock.
-type OnTotalLimitExceeded func(sleepUntil time.Time, totalSleepTime time.Duration)
 
 // WithLimitDetectedCallback adds a callback to be called when a new active rate limit is detected.
 func WithLimitDetectedCallback(callback OnLimitDetected) Option {
@@ -43,6 +29,13 @@ func WithTotalSleepLimit(limit time.Duration, callback OnTotalLimitExceeded) Opt
 	return func(t *SecondaryRateLimitWaiter) {
 		t.totalSleepLimit = &limit
 		t.onTotalLimitExceeded = callback
+	}
+}
+
+// WithUserContext sets the user context to be passed to callbacks.
+func WithUserContext(ctx context.Context) Option {
+	return func(t *SecondaryRateLimitWaiter) {
+		t.userContext = &ctx
 	}
 }
 

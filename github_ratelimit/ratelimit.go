@@ -1,6 +1,7 @@
 package github_ratelimit
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"sync"
@@ -18,6 +19,7 @@ type SecondaryRateLimitWaiter struct {
 	totalSleepLimit  *time.Duration
 
 	// callbacks
+	userContext           *context.Context
 	onLimitDetected       OnLimitDetected
 	onSingleLimitExceeded OnSingleLimitExceeded
 	onTotalLimitExceeded  OnTotalLimitExceeded
@@ -64,7 +66,12 @@ func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Respo
 		return resp, nil
 	}
 
-	shouldRetry := t.updateRateLimit(*secondaryLimit)
+	callbackContext := CallbackContext{
+		Request:  request,
+		Response: resp,
+	}
+
+	shouldRetry := t.updateRateLimit(*secondaryLimit, &callbackContext)
 	if !shouldRetry {
 		return resp, nil
 	}
@@ -85,7 +92,7 @@ func (t *SecondaryRateLimitWaiter) waitForRateLimit() {
 // the rate limit is not updated if there's already an active rate limit.
 // it never waits because the retry handles sleeping anyway.
 // returns whether or not to retry the request.
-func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time) bool {
+func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, callbackContext *CallbackContext) bool {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -104,25 +111,19 @@ func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time) boo
 
 	// do not sleep in case it's above the single sleep limit
 	if t.singleSleepLimit != nil && sleepTime > *t.singleSleepLimit {
-		if t.onSingleLimitExceeded != nil {
-			t.onSingleLimitExceeded(*t.sleepUntil, t.totalSleepTime)
-		}
+		t.triggerCallback(t.onSingleLimitExceeded, callbackContext)
 		return false
 	}
 
 	// do not sleep in case it's above the total sleep limit
 	if t.totalSleepLimit != nil && t.totalSleepTime+sleepTime > *t.totalSleepLimit {
-		if t.onTotalLimitExceeded != nil {
-			t.onTotalLimitExceeded(*t.sleepUntil, t.totalSleepTime)
-		}
+		t.triggerCallback(t.onTotalLimitExceeded, callbackContext)
 		return false
 	}
 
 	// update total time and trigger user callback
 	t.totalSleepTime += sleepTime
-	if t.onLimitDetected != nil {
-		t.onLimitDetected(*t.sleepUntil, t.totalSleepTime)
-	}
+	t.triggerCallback(t.onLimitDetected, callbackContext)
 
 	return true
 }
@@ -165,4 +166,17 @@ func parseSecondaryLimitTime(resp *http.Response) *time.Time {
 	sleepUntil := time.Now().Add(retryAfter)
 
 	return &sleepUntil
+}
+
+func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext) {
+	if callback == nil {
+		return
+	}
+
+	callbackContext.RoundTripper = t
+	callbackContext.UserContext = t.userContext
+	callbackContext.SleepUntil = t.sleepUntil
+	callbackContext.TotalSleepTime = &t.totalSleepTime
+
+	callback(callbackContext)
 }

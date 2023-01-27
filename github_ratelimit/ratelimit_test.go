@@ -29,11 +29,6 @@ func (n *nopServer) RoundTrip(r *http.Request) (*http.Response, error) {
 	}, nil
 }
 
-func callback(until time.Time, totalSleepTime time.Duration) {
-	log.Printf("Secondary rate limit reached! Sleeping for %.2f seconds [%v --> %v]",
-		time.Until(until).Seconds(), time.Now(), until)
-}
-
 func setupInjecter(t *testing.T, every time.Duration, sleep time.Duration) http.RoundTripper {
 	options := github_ratelimit_test.SecondaryRateLimitInjecterOptions{
 		Every: every,
@@ -59,8 +54,13 @@ func TestSecondaryRateLimit(t *testing.T) {
 	const every = 3 * time.Second
 	const sleep = 1 * time.Second
 
+	print := func(context *CallbackContext) {
+		log.Printf("Secondary rate limit reached! Sleeping for %.2f seconds [%v --> %v]",
+			time.Until(*context.SleepUntil).Seconds(), time.Now(), *context.SleepUntil)
+	}
+
 	i := setupInjecter(t, every, sleep)
-	c, err := NewRateLimitWaiterClient(i, WithLimitDetectedCallback(callback))
+	c, err := NewRateLimitWaiterClient(i, WithLimitDetectedCallback(print))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,11 +99,11 @@ func TestSingleSleepLimit(t *testing.T) {
 	const sleep = 1 * time.Second
 
 	slept := false
-	callback := func(time.Time, time.Duration) {
+	callback := func(*CallbackContext) {
 		slept = true
 	}
 	exceeded := false
-	onLimitExceeded := func(time.Time, time.Duration) {
+	onLimitExceeded := func(*CallbackContext) {
 		exceeded = true
 	}
 
@@ -161,11 +161,11 @@ func TestTotalSleepLimit(t *testing.T) {
 	const sleep = 1 * time.Second
 
 	slept := false
-	callback := func(_ time.Time, total time.Duration) {
+	callback := func(*CallbackContext) {
 		slept = true
 	}
 	exceeded := false
-	onLimitExceeded := func(time.Time, time.Duration) {
+	onLimitExceeded := func(*CallbackContext) {
 		exceeded = true
 	}
 
