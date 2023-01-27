@@ -1,5 +1,7 @@
 # go-github-ratelimit
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/gofri/go-github-ratelimit)](https://goreportcard.com/report/github.com/gofri/go-github-ratelimit)
+
 Package go-github-ratelimit provides a http.RoundTripper implementation that handles [secondary rate limit](https://docs.github.com/en/rest/overview/resources-in-the-rest-api?apiVersion=2022-11-28#secondary-rate-limits) for the GitHub API.  
 The RoundTripper waits for the secondary rate limit to finish in a blocking mode and then issues/retries requests.
 
