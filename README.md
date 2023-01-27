@@ -32,6 +32,7 @@ func main() {
 
 ## Options
 The RoundTripper accepts a set of optional options:
+- User Context: provide a context.Context to pass to callbacks.
 - Single Sleep Limit: limit the sleep time for a single rate limit.
 - Total Sleep Limit: limit the accumulated sleep time for all rate limits.
   
