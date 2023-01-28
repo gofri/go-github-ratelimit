@@ -26,6 +26,10 @@ type SecondaryRateLimitWaiter struct {
 }
 
 func NewRateLimitWaiter(base http.RoundTripper, opts ...Option) (*SecondaryRateLimitWaiter, error) {
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
 	waiter := SecondaryRateLimitWaiter{
 		base: base,
 	}
