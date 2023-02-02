@@ -97,6 +97,11 @@ func (t *SecondaryRateLimitWaiter) waitForRateLimit() {
 // it never waits because the retry handles sleeping anyway.
 // returns whether or not to retry the request.
 func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, callbackContext *CallbackContext) bool {
+	// quick check with the lock: maybe the secondary limit just passed
+	if time.Now().After(secondaryLimit) {
+		return true
+	}
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -105,29 +110,28 @@ func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, cal
 		return true
 	}
 
-	t.sleepUntil = &secondaryLimit
-
-	// check after updating because the secondary rate limit might have passed while we waited for the lock
-	sleepTime := t.currentSleepTimeUnlocked()
+	// check if the secondary rate limit happened to have passed while we waited for the lock
+	sleepTime := time.Until(secondaryLimit)
 	if sleepTime <= 0 {
 		return true
 	}
 
 	// do not sleep in case it's above the single sleep limit
 	if t.singleSleepLimit != nil && sleepTime > *t.singleSleepLimit {
-		t.triggerCallback(t.onSingleLimitExceeded, callbackContext)
+		t.triggerCallback(t.onSingleLimitExceeded, callbackContext, secondaryLimit)
 		return false
 	}
 
 	// do not sleep in case it's above the total sleep limit
 	if t.totalSleepLimit != nil && t.totalSleepTime+sleepTime > *t.totalSleepLimit {
-		t.triggerCallback(t.onTotalLimitExceeded, callbackContext)
+		t.triggerCallback(t.onTotalLimitExceeded, callbackContext, secondaryLimit)
 		return false
 	}
 
-	// update total time and trigger user callback
+	// a legitimate new limit
+	t.sleepUntil = &secondaryLimit
 	t.totalSleepTime += sleepTime
-	t.triggerCallback(t.onLimitDetected, callbackContext)
+	t.triggerCallback(t.onLimitDetected, callbackContext, secondaryLimit)
 
 	return true
 }
@@ -172,14 +176,14 @@ func parseSecondaryLimitTime(resp *http.Response) *time.Time {
 	return &sleepUntil
 }
 
-func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext) {
+func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newSleepUntil time.Time) {
 	if callback == nil {
 		return
 	}
 
 	callbackContext.RoundTripper = t
 	callbackContext.UserContext = t.userContext
-	callbackContext.SleepUntil = t.sleepUntil
+	callbackContext.SleepUntil = &newSleepUntil
 	callbackContext.TotalSleepTime = &t.totalSleepTime
 
 	callback(callbackContext)
