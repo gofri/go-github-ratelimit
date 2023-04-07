@@ -23,7 +23,10 @@ func main() {
 		&oauth2.Token{AccessToken: "Your Personal Access Token"},
 	)
 	tc := oauth2.NewClient(ctx, ts)
-	rateLimiter := github_ratelimit.NewRateLimitWaiterClient(tc.Transport)
+	rateLimiter, err := github_ratelimit.NewRateLimitWaiterClient(tc.Transport)
+	if err != nil {
+		panic(err)
+	}
 	client := github.NewClient(rateLimiter)
 
 	// now use the client as you please
