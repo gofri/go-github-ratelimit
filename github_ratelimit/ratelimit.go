@@ -9,7 +9,7 @@ import (
 )
 
 type SecondaryRateLimitWaiter struct {
-	base       http.RoundTripper
+	Base       http.RoundTripper
 	sleepUntil *time.Time
 	lock       sync.RWMutex
 
@@ -31,7 +31,7 @@ func NewRateLimitWaiter(base http.RoundTripper, opts ...Option) (*SecondaryRateL
 	}
 
 	waiter := SecondaryRateLimitWaiter{
-		base: base,
+		Base: base,
 	}
 	applyOptions(&waiter, opts...)
 
@@ -60,7 +60,7 @@ func NewRateLimitWaiterClient(base http.RoundTripper, opts ...Option) (*http.Cli
 func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Response, error) {
 	t.waitForRateLimit()
 
-	resp, err := t.base.RoundTrip(request)
+	resp, err := t.Base.RoundTrip(request)
 	if err != nil {
 		return resp, err
 	}
