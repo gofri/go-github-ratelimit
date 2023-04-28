@@ -156,7 +156,7 @@ func TestSingleSleepLimit(t *testing.T) {
 	if got, want := resp.Header.Get("Retry-After"), fmt.Sprintf("%v", sleep.Seconds()); got != want {
 		t.Fatal(got, want)
 	}
-	// try again - make sure that triggering the callback doesn't cause it to sleep next time
+	// try again - make sure that triggering the callback does not cause it to sleep next time
 	tBefore := time.Now()
 	_, err = c.Get("/")
 	if err != nil {
@@ -217,7 +217,7 @@ func TestTotalSleepLimit(t *testing.T) {
 	if got, want := resp.Header.Get("Retry-After"), fmt.Sprintf("%v", sleep.Seconds()); got != want {
 		t.Fatal(got, want)
 	}
-	// try again - make sure that triggering the callback doesn't cause it to sleep next time
+	// try again - make sure that triggering the callback does not cause it to sleep next time
 	tBefore := time.Now()
 	_, err = c.Get("/")
 	if err != nil {

@@ -55,7 +55,7 @@ func NewRateLimitWaiterClient(base http.RoundTripper, opts ...Option) (*http.Cli
 // so we want to prevent these requests, not just for the sake of cpu/network utilization.
 // Nonetheless, there is no way to prevent subtle race conditions without completely serializing the requests,
 // so we prefer to let some slip in case of a race condition, i.e.,
-// after a retry-after response is received and before it it processed,
+// after a retry-after response is received and before it is processed,
 // a few other (parallel) requests may be issued.
 func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Response, error) {
 	t.waitForRateLimit()
@@ -92,12 +92,12 @@ func (t *SecondaryRateLimitWaiter) waitForRateLimit() {
 	time.Sleep(sleepTime)
 }
 
-// updateRateLimit updates the active rate limit and prints a message to the user.
-// the rate limit is not updated if there's already an active rate limit.
+// updateRateLimit updates the active rate limit and triggers user callbacks if needed.
+// the rate limit is not updated if there is already an active rate limit.
 // it never waits because the retry handles sleeping anyway.
 // returns whether or not to retry the request.
 func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, callbackContext *CallbackContext) bool {
-	// quick check with the lock: maybe the secondary limit just passed
+	// quick check without the lock: maybe the secondary limit just passed
 	if time.Now().After(secondaryLimit) {
 		return true
 	}
@@ -116,13 +116,13 @@ func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, cal
 		return true
 	}
 
-	// do not sleep in case it's above the single sleep limit
+	// do not sleep in case it is above the single sleep limit
 	if t.singleSleepLimit != nil && sleepTime > *t.singleSleepLimit {
 		t.triggerCallback(t.onSingleLimitExceeded, callbackContext, secondaryLimit)
 		return false
 	}
 
-	// do not sleep in case it's above the total sleep limit
+	// do not sleep in case it is above the total sleep limit
 	if t.totalSleepLimit != nil && t.totalSleepTime+sleepTime > *t.totalSleepLimit {
 		t.triggerCallback(t.onTotalLimitExceeded, callbackContext, secondaryLimit)
 		return false
