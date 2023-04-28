@@ -155,25 +155,60 @@ func parseSecondaryLimitTime(resp *http.Response) *time.Time {
 		return nil
 	}
 
-	retryHeader, ok := resp.Header["Retry-After"]
-	if !ok || len(retryHeader) == 0 {
+	if sleepUntil := parseRetryAfter(resp.Header); sleepUntil != nil {
+		return sleepUntil
+	}
+
+	if sleepUntil := parseXRateLimitReset(resp.Header); sleepUntil != nil {
+		return sleepUntil
+	}
+
+	return nil
+}
+
+// parseRetryAfter parses the GitHub API response header in case a Retry-After is returned.
+func parseRetryAfter(header http.Header) *time.Time {
+	retryAfterSeconds, ok := httpHeaderIntValue(header, "retry-after")
+	if !ok || retryAfterSeconds <= 0 {
 		return nil
 	}
 
 	// per GitHub API, the header is set to the number of seconds to wait
-	retryAfterSeconds, err := strconv.ParseInt(retryHeader[0], 10, 64)
-	if err != nil {
-		return nil
-	}
-
-	if retryAfterSeconds <= 0 {
-		return nil
-	}
-
-	retryAfter := time.Duration(retryAfterSeconds) * time.Second
-	sleepUntil := time.Now().Add(retryAfter)
+	sleepUntil := time.Now().Add(time.Duration(retryAfterSeconds) * time.Second)
 
 	return &sleepUntil
+}
+
+// parseXRateLimitReset parses the GitHub API response header in case a x-ratelimit-reset is returned.
+// to avoid handling primary rate limits (which are categorized),
+// we only handle x-ratelimit-reset in case the primary rate limit is not reached.
+func parseXRateLimitReset(header http.Header) *time.Time {
+	if remaining, ok := httpHeaderIntValue(header, "x-ratelimit-remaining"); ok && remaining == 0 {
+		// this is a primary rate limit; ignore it
+		return nil
+	}
+
+	secondsSinceEpoch, ok := httpHeaderIntValue(header, "x-ratelimit-reset")
+	if !ok || secondsSinceEpoch <= 0 {
+		return nil
+	}
+
+	// per GitHub API, the header is set to the number of seconds since epoch (UTC)
+	sleepUntil := time.Unix(secondsSinceEpoch, 0)
+
+	return &sleepUntil
+}
+
+func httpHeaderIntValue(header http.Header, key string) (int64, bool) {
+	val, ok := header[http.CanonicalHeaderKey(key)]
+	if !ok || len(val) == 0 {
+		return 0, false
+	}
+	asInt, err := strconv.ParseInt(val[0], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return asInt, true
 }
 
 func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newSleepUntil time.Time) {
