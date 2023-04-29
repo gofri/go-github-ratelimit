@@ -200,11 +200,11 @@ func parseXRateLimitReset(header http.Header) *time.Time {
 }
 
 func httpHeaderIntValue(header http.Header, key string) (int64, bool) {
-	val, ok := header[http.CanonicalHeaderKey(key)]
-	if !ok || len(val) == 0 {
+	val := header.Get(key)
+	if val == "" {
 		return 0, false
 	}
-	asInt, err := strconv.ParseInt(val[0], 10, 64)
+	asInt, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
 		return 0, false
 	}
