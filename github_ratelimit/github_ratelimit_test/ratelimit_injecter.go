@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gofri/go-github-ratelimit/github_ratelimit"
 )
 
 type SecondaryRateLimitInjecterOptions struct {
@@ -115,18 +117,18 @@ func (t *SecondaryRateLimitInjecter) inject(resp *http.Response) *http.Response 
 
 func (t *SecondaryRateLimitInjecter) toRetryResponse(resp *http.Response) *http.Response {
 	secondsToBlock := t.getTimeToBlock()
-	httpHeaderSetIntValue(resp, "retry-after", int(secondsToBlock.Seconds()))
+	httpHeaderSetIntValue(resp, github_ratelimit.HeaderRetryAfter, int(secondsToBlock.Seconds()))
 	return resp
 }
 
 func (t *SecondaryRateLimitInjecter) toXRateLimitResponse(resp *http.Response) *http.Response {
 	endOfBlock := time.Now().Add(t.getTimeToBlock())
-	httpHeaderSetIntValue(resp, "x-ratelimit-reset", int(endOfBlock.Unix()))
+	httpHeaderSetIntValue(resp, github_ratelimit.HeaderXRateLimitReset, int(endOfBlock.Unix()))
 	return resp
 }
 
 func (t *SecondaryRateLimitInjecter) toPrimaryRateLimitResponse(resp *http.Response) *http.Response {
-	httpHeaderSetIntValue(resp, "x-ratelimit-remaining", 0)
+	httpHeaderSetIntValue(resp, github_ratelimit.HeaderXRateLimitRemaining, 0)
 	return t.toXRateLimitResponse(resp)
 }
 

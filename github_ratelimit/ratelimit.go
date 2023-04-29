@@ -183,12 +183,12 @@ func parseRetryAfter(header http.Header) *time.Time {
 // to avoid handling primary rate limits (which are categorized),
 // we only handle x-ratelimit-reset in case the primary rate limit is not reached.
 func parseXRateLimitReset(header http.Header) *time.Time {
-	if remaining, ok := httpHeaderIntValue(header, "x-ratelimit-remaining"); ok && remaining == 0 {
+	if remaining, ok := httpHeaderIntValue(header, HeaderXRateLimitRemaining); ok && remaining == 0 {
 		// this is a primary rate limit; ignore it
 		return nil
 	}
 
-	secondsSinceEpoch, ok := httpHeaderIntValue(header, "x-ratelimit-reset")
+	secondsSinceEpoch, ok := httpHeaderIntValue(header, HeaderXRateLimitReset)
 	if !ok || secondsSinceEpoch <= 0 {
 		return nil
 	}

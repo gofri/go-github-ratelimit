@@ -1,4 +1,4 @@
-package github_ratelimit
+package github_ratelimit_test
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofri/go-github-ratelimit/github_ratelimit/github_ratelimit_test"
+	"github.com/gofri/go-github-ratelimit/github_ratelimit"
 )
 
 type nopServer struct {
@@ -30,15 +30,15 @@ func (n *nopServer) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func setupSecondaryLimitInjecter(t *testing.T, every time.Duration, sleep time.Duration) http.RoundTripper {
-	options := github_ratelimit_test.SecondaryRateLimitInjecterOptions{
+	options := SecondaryRateLimitInjecterOptions{
 		Every: every,
 		Sleep: sleep,
 	}
 	return setupInjecterWithOptions(t, options)
 }
 
-func setupInjecterWithOptions(t *testing.T, options github_ratelimit_test.SecondaryRateLimitInjecterOptions) http.RoundTripper {
-	i, err := github_ratelimit_test.NewRateLimitInjecter(&nopServer{}, &options)
+func setupInjecterWithOptions(t *testing.T, options SecondaryRateLimitInjecterOptions) http.RoundTripper {
+	i, err := NewRateLimitInjecter(&nopServer{}, &options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func setupInjecterWithOptions(t *testing.T, options github_ratelimit_test.Second
 }
 
 func waitForNextSleep(injecter http.RoundTripper) {
-	i := injecter.(*github_ratelimit_test.SecondaryRateLimitInjecter)
+	i := injecter.(*SecondaryRateLimitInjecter)
 	time.Sleep(time.Until(i.CurrentSleepEnd()))
 	time.Sleep(time.Until(i.NextSleepStart()))
 }
@@ -58,13 +58,13 @@ func TestSecondaryRateLimit(t *testing.T) {
 	const every = 5 * time.Second
 	const sleep = 1 * time.Second
 
-	print := func(context *CallbackContext) {
+	print := func(context *github_ratelimit.CallbackContext) {
 		log.Printf("Secondary rate limit reached! Sleeping for %.2f seconds [%v --> %v]",
 			time.Until(*context.SleepUntil).Seconds(), time.Now(), *context.SleepUntil)
 	}
 
 	i := setupSecondaryLimitInjecter(t, every, sleep)
-	c, err := NewRateLimitWaiterClient(i, WithLimitDetectedCallback(print))
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(print))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestSecondaryRateLimit(t *testing.T) {
 
 	// expect a low number of abuse attempts, i.e.,
 	// not a lot of "slipped" messages due to race conditions.
-	asInjecter, ok := i.(*github_ratelimit_test.SecondaryRateLimitInjecter)
+	asInjecter, ok := i.(*SecondaryRateLimitInjecter)
 	if !ok {
 		t.Fatal()
 	}
@@ -105,19 +105,19 @@ func TestSingleSleepLimit(t *testing.T) {
 	const sleep = 1 * time.Second
 
 	slept := false
-	callback := func(*CallbackContext) {
+	callback := func(*github_ratelimit.CallbackContext) {
 		slept = true
 	}
 	exceeded := false
-	onLimitExceeded := func(*CallbackContext) {
+	onLimitExceeded := func(*github_ratelimit.CallbackContext) {
 		exceeded = true
 	}
 
 	// test sleep is short enough
 	i := setupSecondaryLimitInjecter(t, every, sleep)
-	c, err := NewRateLimitWaiterClient(i,
-		WithLimitDetectedCallback(callback),
-		WithSingleSleepLimit(5*time.Second, onLimitExceeded))
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i,
+		github_ratelimit.WithLimitDetectedCallback(callback),
+		github_ratelimit.WithSingleSleepLimit(5*time.Second, onLimitExceeded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,9 +138,9 @@ func TestSingleSleepLimit(t *testing.T) {
 	// test sleep is too long
 	slept = false
 	i = setupSecondaryLimitInjecter(t, every, sleep)
-	c, err = NewRateLimitWaiterClient(i,
-		WithLimitDetectedCallback(callback),
-		WithSingleSleepLimit(sleep/2, onLimitExceeded))
+	c, err = github_ratelimit.NewRateLimitWaiterClient(i,
+		github_ratelimit.WithLimitDetectedCallback(callback),
+		github_ratelimit.WithSingleSleepLimit(sleep/2, onLimitExceeded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestSingleSleepLimit(t *testing.T) {
 	if slept || !exceeded {
 		t.Fatal(err)
 	}
-	if got, want := resp.Header.Get("Retry-After"), fmt.Sprintf("%v", sleep.Seconds()); got != want {
+	if got, want := resp.Header.Get(github_ratelimit.HeaderRetryAfter), fmt.Sprintf("%v", sleep.Seconds()); got != want {
 		t.Fatal(got, want)
 	}
 	// try again - make sure that triggering the callback does not cause it to sleep next time
@@ -178,19 +178,19 @@ func TestTotalSleepLimit(t *testing.T) {
 	const sleep = 1 * time.Second
 
 	slept := false
-	callback := func(*CallbackContext) {
+	callback := func(*github_ratelimit.CallbackContext) {
 		slept = true
 	}
 	exceeded := false
-	onLimitExceeded := func(*CallbackContext) {
+	onLimitExceeded := func(*github_ratelimit.CallbackContext) {
 		exceeded = true
 	}
 
 	// test sleep is short enough
 	i := setupSecondaryLimitInjecter(t, every, sleep)
-	c, err := NewRateLimitWaiterClient(i,
-		WithLimitDetectedCallback(callback),
-		WithTotalSleepLimit(time.Second+time.Second/2, onLimitExceeded))
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i,
+		github_ratelimit.WithLimitDetectedCallback(callback),
+		github_ratelimit.WithTotalSleepLimit(time.Second+time.Second/2, onLimitExceeded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestTotalSleepLimit(t *testing.T) {
 	if slept || !exceeded {
 		t.Fatal(slept, exceeded)
 	}
-	if got, want := resp.Header.Get("Retry-After"), fmt.Sprintf("%v", sleep.Seconds()); got != want {
+	if got, want := resp.Header.Get(github_ratelimit.HeaderRetryAfter), fmt.Sprintf("%v", sleep.Seconds()); got != want {
 		t.Fatal(got, want)
 	}
 	// try again - make sure that triggering the callback does not cause it to sleep next time
@@ -239,17 +239,17 @@ func TestXRateLimit(t *testing.T) {
 	const sleep = 1 * time.Second
 
 	slept := false
-	callback := func(*CallbackContext) {
+	callback := func(*github_ratelimit.CallbackContext) {
 		slept = true
 	}
 
 	// test sleep is short enough
-	i := setupInjecterWithOptions(t, github_ratelimit_test.SecondaryRateLimitInjecterOptions{
+	i := setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
 		Every:         every,
 		Sleep:         sleep,
 		UseXRateLimit: true,
 	})
-	c, err := NewRateLimitWaiterClient(i, WithLimitDetectedCallback(callback))
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,17 +273,17 @@ func TestPrimaryRateLimitIgnored(t *testing.T) {
 	const sleep = 1 * time.Second
 
 	slept := false
-	callback := func(*CallbackContext) {
+	callback := func(*github_ratelimit.CallbackContext) {
 		slept = true
 	}
 
 	// test sleep is short enough
-	i := setupInjecterWithOptions(t, github_ratelimit_test.SecondaryRateLimitInjecterOptions{
+	i := setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
 		Every:               every,
 		Sleep:               sleep,
 		UsePrimaryRateLimit: true,
 	})
-	c, err := NewRateLimitWaiterClient(i, WithLimitDetectedCallback(callback))
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
 	if err != nil {
 		t.Fatal(err)
 	}
