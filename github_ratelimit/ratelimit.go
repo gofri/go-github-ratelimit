@@ -130,7 +130,7 @@ func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, cal
 
 	// a legitimate new limit
 	t.sleepUntil = &secondaryLimit
-	t.totalSleepTime += sleepTime
+	t.totalSleepTime += smoothSleepTime(sleepTime)
 	t.triggerCallback(t.onLimitDetected, callbackContext, secondaryLimit)
 
 	return true
@@ -141,6 +141,19 @@ func (t *SecondaryRateLimitWaiter) currentSleepTimeUnlocked() time.Duration {
 		return 0
 	}
 	return time.Until(*t.sleepUntil)
+}
+
+func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newSleepUntil time.Time) {
+	if callback == nil {
+		return
+	}
+
+	callbackContext.RoundTripper = t
+	callbackContext.UserContext = t.userContext
+	callbackContext.SleepUntil = &newSleepUntil
+	callbackContext.TotalSleepTime = &t.totalSleepTime
+
+	callback(callbackContext)
 }
 
 // parseSecondaryLimitTime parses the GitHub API response header,
@@ -211,15 +224,15 @@ func httpHeaderIntValue(header http.Header, key string) (int64, bool) {
 	return asInt, true
 }
 
-func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newSleepUntil time.Time) {
-	if callback == nil {
-		return
+// smoothSleepTime rounds the sleep time to whole seconds.
+// github only uses seconds to indicate the time to sleep,
+// but we actually sleep for less time becaues of internal processing.
+// round up the durations to get the original values.
+func smoothSleepTime(sleepTime time.Duration) time.Duration {
+	if sleepTime.Milliseconds() == 0 {
+		return sleepTime
+	} else {
+		seconds := (sleepTime.Seconds()) + 1
+		return time.Duration(seconds) * time.Second
 	}
-
-	callbackContext.RoundTripper = t
-	callbackContext.UserContext = t.userContext
-	callbackContext.SleepUntil = &newSleepUntil
-	callbackContext.TotalSleepTime = &t.totalSleepTime
-
-	callback(callbackContext)
 }

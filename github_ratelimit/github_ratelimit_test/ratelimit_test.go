@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,6 +55,7 @@ func waitForNextSleep(injecter http.RoundTripper) {
 }
 
 func TestSecondaryRateLimit(t *testing.T) {
+	t.Parallel()
 	rand.Seed(time.Now().UnixNano())
 	const requests = 10000
 	const every = 5 * time.Second
@@ -102,6 +104,7 @@ func TestSecondaryRateLimit(t *testing.T) {
 }
 
 func TestSingleSleepLimit(t *testing.T) {
+	t.Parallel()
 	const every = 1 * time.Second
 	const sleep = 1 * time.Second
 
@@ -175,6 +178,7 @@ func TestSingleSleepLimit(t *testing.T) {
 }
 
 func TestTotalSleepLimit(t *testing.T) {
+	t.Parallel()
 	const every = 1 * time.Second
 	const sleep = 1 * time.Second
 
@@ -236,6 +240,7 @@ func TestTotalSleepLimit(t *testing.T) {
 }
 
 func TestXRateLimit(t *testing.T) {
+	t.Parallel()
 	const every = 1 * time.Second
 	const sleep = 1 * time.Second
 
@@ -270,6 +275,7 @@ func TestXRateLimit(t *testing.T) {
 }
 
 func TestPrimaryRateLimitIgnored(t *testing.T) {
+	t.Parallel()
 	const every = 1 * time.Second
 	const sleep = 1 * time.Second
 
@@ -304,6 +310,7 @@ func TestPrimaryRateLimitIgnored(t *testing.T) {
 }
 
 func TestCallbackContext(t *testing.T) {
+	t.Parallel()
 	const every = 1 * time.Second
 	const sleep = 1 * time.Second
 	i := setupSecondaryLimitInjecter(t, every, sleep)
@@ -311,20 +318,41 @@ func TestCallbackContext(t *testing.T) {
 	ctxKey := struct{}{}
 	ctxVal := 10
 	userContext := context.WithValue(context.Background(), ctxKey, ctxVal)
+	var roundTripper *github_ratelimit.SecondaryRateLimitWaiter = nil
+	var requestNum atomic.Int64
+	requestNum.Add(1)
+	requestsCycle := 1
 
 	callback := func(ctx *github_ratelimit.CallbackContext) {
 		val := (*ctx.UserContext).Value(ctxKey).(int)
 		if val != ctxVal {
 			t.Fatalf("user ctx mismatch: %v != %v", val, ctxVal)
 		}
+		if got, want := ctx.RoundTripper, roundTripper; got != want {
+			t.Fatalf("roundtripper mismatch: %v != %v", got, want)
+		}
+		if ctx.Request == nil || ctx.Response == nil {
+			t.Fatalf("missing request / response: %v / %v:", ctx.Request, ctx.Response)
+		}
+		if got, min, max := time.Until(*ctx.SleepUntil), time.Duration(0), sleep*time.Duration(requestNum.Load()); got <= min || got > max {
+			t.Fatalf("unexpected sleep until time: %v < %v <= %v", min, got, max)
+		}
+		if got, want := *ctx.TotalSleepTime, sleep*time.Duration(requestsCycle); got != want {
+			t.Fatalf("unexpected total sleep time: %v != %v", got, want)
+		}
+		requestNum.Add(1)
 	}
 
-	c, err := github_ratelimit.NewRateLimitWaiterClient(i,
+	r, err := github_ratelimit.NewRateLimitWaiter(i,
 		github_ratelimit.WithUserContext(userContext),
 		github_ratelimit.WithLimitDetectedCallback(callback),
 	)
 	if err != nil {
 		t.Fatal(err)
+	}
+	roundTripper = r
+	c := &http.Client{
+		Transport: r,
 	}
 
 	// initialize injecter timing
@@ -336,4 +364,21 @@ func TestCallbackContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	waitForNextSleep(i)
+	requestsCycle++
+	errChan := make(chan error)
+	parallelReqs := 10
+	for index := 0; index < parallelReqs; index++ {
+		go func() {
+			_, err = c.Get("/")
+			errChan <- err
+		}()
+	}
+	for index := 0; index < parallelReqs; index++ {
+		if err := <-errChan; err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(errChan)
 }
