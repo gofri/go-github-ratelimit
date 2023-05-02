@@ -1,6 +1,7 @@
 package github_ratelimit_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -299,5 +300,40 @@ func TestPrimaryRateLimitIgnored(t *testing.T) {
 	}
 	if slept {
 		t.Fatal(slept)
+	}
+}
+
+func TestCallbackContext(t *testing.T) {
+	const every = 1 * time.Second
+	const sleep = 1 * time.Second
+	i := setupSecondaryLimitInjecter(t, every, sleep)
+
+	ctxKey := struct{}{}
+	ctxVal := 10
+	userContext := context.WithValue(context.Background(), ctxKey, ctxVal)
+
+	callback := func(ctx *github_ratelimit.CallbackContext) {
+		val := (*ctx.UserContext).Value(ctxKey).(int)
+		if val != ctxVal {
+			t.Fatalf("user ctx mismatch: %v != %v", val, ctxVal)
+		}
+	}
+
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i,
+		github_ratelimit.WithUserContext(userContext),
+		github_ratelimit.WithLimitDetectedCallback(callback),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// initialize injecter timing
+	_, _ = c.Get("/")
+	waitForNextSleep(i)
+
+	// attempt during rate limit
+	_, err = c.Get("/")
+	if err != nil {
+		t.Fatal(err)
 	}
 }
