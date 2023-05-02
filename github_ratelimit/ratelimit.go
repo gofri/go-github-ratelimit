@@ -224,10 +224,10 @@ func httpHeaderIntValue(header http.Header, key string) (int64, bool) {
 	return asInt, true
 }
 
-// smoothSleepTime rounds the sleep time to whole seconds.
+// smoothSleepTime rounds up the sleep time to whole seconds.
 // github only uses seconds to indicate the time to sleep,
-// but we actually sleep for less time becaues of internal processing.
-// round up the durations to get the original values.
+// but we sleep for less time because internal processing delay is taken into account.
+// round up the duration to get the original value.
 func smoothSleepTime(sleepTime time.Duration) time.Duration {
 	if sleepTime.Milliseconds() == 0 {
 		return sleepTime
