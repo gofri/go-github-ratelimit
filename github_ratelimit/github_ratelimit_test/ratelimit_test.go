@@ -371,7 +371,7 @@ func TestCallbackContext(t *testing.T) {
 	parallelReqs := 10
 	for index := 0; index < parallelReqs; index++ {
 		go func() {
-			_, err = c.Get("/")
+			_, err := c.Get("/")
 			errChan <- err
 		}()
 	}
