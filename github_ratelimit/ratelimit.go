@@ -160,11 +160,7 @@ func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContex
 // looking for the secondary rate limit as defined by GitHub API documentation.
 // https://docs.github.com/en/rest/overview/resources-in-the-rest-api#secondary-rate-limits
 func parseSecondaryLimitTime(resp *http.Response) *time.Time {
-	if resp.StatusCode != http.StatusForbidden {
-		return nil
-	}
-
-	if resp.Header == nil {
+	if !isSecondaryRateLimit(resp) {
 		return nil
 	}
 
@@ -172,7 +168,7 @@ func parseSecondaryLimitTime(resp *http.Response) *time.Time {
 		return sleepUntil
 	}
 
-	if sleepUntil := parseXRateLimitReset(resp.Header); sleepUntil != nil {
+	if sleepUntil := parseXRateLimitReset(resp); sleepUntil != nil {
 		return sleepUntil
 	}
 
@@ -195,13 +191,8 @@ func parseRetryAfter(header http.Header) *time.Time {
 // parseXRateLimitReset parses the GitHub API response header in case a x-ratelimit-reset is returned.
 // to avoid handling primary rate limits (which are categorized),
 // we only handle x-ratelimit-reset in case the primary rate limit is not reached.
-func parseXRateLimitReset(header http.Header) *time.Time {
-	if remaining, ok := httpHeaderIntValue(header, HeaderXRateLimitRemaining); ok && remaining == 0 {
-		// this is a primary rate limit; ignore it
-		return nil
-	}
-
-	secondsSinceEpoch, ok := httpHeaderIntValue(header, HeaderXRateLimitReset)
+func parseXRateLimitReset(resp *http.Response) *time.Time {
+	secondsSinceEpoch, ok := httpHeaderIntValue(resp.Header, HeaderXRateLimitReset)
 	if !ok || secondsSinceEpoch <= 0 {
 		return nil
 	}

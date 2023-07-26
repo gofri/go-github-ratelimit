@@ -309,6 +309,48 @@ func TestPrimaryRateLimitIgnored(t *testing.T) {
 	}
 }
 
+func TestHTTPForbiddenIgnored(t *testing.T) {
+	t.Parallel()
+	const every = 1 * time.Second
+	const sleep = 1 * time.Second
+
+	slept := false
+	callback := func(*github_ratelimit.CallbackContext) {
+		slept = true
+	}
+
+	// test sleep is short enough
+	i := setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
+		Every:       every,
+		Sleep:       sleep,
+		InvalidBody: true,
+	})
+
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// initialize injecter timing
+	_, _ = c.Get("/")
+	waitForNextSleep(i)
+
+	// attempt during rate limit (using invalid body, so the injction is of HTTP Foribdden)
+	resp, err := c.Get("/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slept {
+		t.Fatal(slept)
+	}
+
+	if invaidBody, err := IsInvalidBody(resp); err != nil {
+		t.Fatal(err)
+	} else if !invaidBody {
+		t.Fatalf("expected invalid body")
+	}
+}
+
 func TestCallbackContext(t *testing.T) {
 	t.Parallel()
 	const every = 1 * time.Second

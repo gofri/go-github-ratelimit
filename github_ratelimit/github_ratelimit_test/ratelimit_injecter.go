@@ -1,15 +1,20 @@
 package github_ratelimit_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/gofri/go-github-ratelimit/github_ratelimit"
+)
+
+const (
+	InvalidBodyContent = `{"message": "not as expected"}`
 )
 
 type SecondaryRateLimitInjecterOptions struct {
@@ -17,6 +22,7 @@ type SecondaryRateLimitInjecterOptions struct {
 	Sleep               time.Duration
 	UseXRateLimit       bool
 	UsePrimaryRateLimit bool
+	InvalidBody         bool
 }
 
 func NewRateLimitInjecter(base http.RoundTripper, options *SecondaryRateLimitInjecterOptions) (http.RoundTripper, error) {
@@ -74,7 +80,7 @@ func (t *SecondaryRateLimitInjecter) RoundTrip(request *http.Request) (*http.Res
 	// on-going rate limit
 	if t.blockUntil.After(now) {
 		t.AbuseAttempts++
-		return t.inject(resp), nil
+		return t.inject(resp)
 	}
 
 	nextStart := t.NextSleepStart()
@@ -82,7 +88,7 @@ func (t *SecondaryRateLimitInjecter) RoundTrip(request *http.Request) (*http.Res
 	// start a rate limit period
 	if !now.Before(nextStart) {
 		t.blockUntil = nextStart.Add(t.options.Sleep)
-		return t.inject(resp), nil
+		return t.inject(resp)
 	}
 
 	return resp, nil
@@ -96,21 +102,37 @@ func (r *SecondaryRateLimitInjecter) NextSleepStart() time.Time {
 	return r.blockUntil.Add(r.options.Every)
 }
 
-var secondaryRateLimitBody = `{
-	"message": "You have exceeded a secondary rate limit and have been temporarily blocked from content creation. Please retry your request again later.",
-	"documentation_url": "https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits"
-}`
+func getSecondaryRateLimitBody() (io.ReadCloser, error) {
+	body := github_ratelimit.SecondaryRateLimitBody{
+		Message:     github_ratelimit.SecondaryRateLimitMessage,
+		DocumentURL: github_ratelimit.SecondaryRateLimitDocumentationURL,
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
 
-func (t *SecondaryRateLimitInjecter) inject(resp *http.Response) *http.Response {
+	return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+}
+
+func (t *SecondaryRateLimitInjecter) inject(resp *http.Response) (*http.Response, error) {
 	if t.options.UsePrimaryRateLimit {
-		return t.toPrimaryRateLimitResponse(resp)
+		return t.toPrimaryRateLimitResponse(resp), nil
 	} else {
+		body, err := getSecondaryRateLimitBody()
+		if err != nil {
+			return nil, err
+		}
+		if t.options.InvalidBody {
+			body = io.NopCloser(bytes.NewReader([]byte(InvalidBodyContent)))
+		}
+
 		resp.StatusCode = http.StatusForbidden
-		resp.Body = io.NopCloser(strings.NewReader(secondaryRateLimitBody))
+		resp.Body = body
 		if t.options.UseXRateLimit {
-			return t.toXRateLimitResponse(resp)
+			return t.toXRateLimitResponse(resp), nil
 		} else {
-			return t.toRetryResponse(resp)
+			return t.toRetryResponse(resp), nil
 		}
 	}
 }
@@ -142,4 +164,14 @@ func (t *SecondaryRateLimitInjecter) getTimeToBlock() time.Duration {
 
 func httpHeaderSetIntValue(resp *http.Response, key string, value int) {
 	resp.Header.Set(key, strconv.Itoa(value))
+}
+
+func IsInvalidBody(resp *http.Response) (bool, error) {
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+
+	return string(body) == InvalidBodyContent, nil
 }
