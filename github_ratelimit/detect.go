@@ -19,7 +19,7 @@ const (
 )
 
 func (s SecondaryRateLimitBody) IsSecondaryRateLimit() bool {
-	return strings.Contains(s.Message, SecondaryRateLimitMessage) && s.DocumentURL == SecondaryRateLimitDocumentationURL
+	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) && s.DocumentURL == SecondaryRateLimitDocumentationURL
 }
 
 // isSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.
