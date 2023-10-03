@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 )
 
 type SecondaryRateLimitBody struct {
@@ -13,12 +14,12 @@ type SecondaryRateLimitBody struct {
 }
 
 const (
-	SecondaryRateLimitMessage          = `You have exceeded a secondary rate limit and have been temporarily blocked from content creation. Please retry your request again later.`
+	SecondaryRateLimitMessage          = `You have exceeded a secondary rate limit`
 	SecondaryRateLimitDocumentationURL = `https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
 )
 
 func (s SecondaryRateLimitBody) IsSecondaryRateLimit() bool {
-	return s.Message == SecondaryRateLimitMessage && s.DocumentURL == SecondaryRateLimitDocumentationURL
+	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) && s.DocumentURL == SecondaryRateLimitDocumentationURL
 }
 
 // isSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.
