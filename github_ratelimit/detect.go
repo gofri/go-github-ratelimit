@@ -14,12 +14,12 @@ type SecondaryRateLimitBody struct {
 }
 
 const (
-	SecondaryRateLimitMessage          = `You have exceeded a secondary rate limit`
-	SecondaryRateLimitDocumentationURL = `https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
+	SecondaryRateLimitMessage           = `You have exceeded a secondary rate limit`
+	SecondaryRateLimitDocumentationPath = `/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
 )
 
 func (s SecondaryRateLimitBody) IsSecondaryRateLimit() bool {
-	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) && s.DocumentURL == SecondaryRateLimitDocumentationURL
+	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) && strings.HasSuffix(s.DocumentURL, SecondaryRateLimitDocumentationPath)
 }
 
 // isSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.

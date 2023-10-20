@@ -17,6 +17,11 @@ const (
 	InvalidBodyContent = `{"message": "not as expected"}`
 )
 
+const (
+	SecondaryRateLimitMessage          = `You have exceeded a secondary rate limit. Please wait a few minutes before you try again.`
+	SecondaryRateLimitDocumentationURL = `https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
+)
+
 type SecondaryRateLimitInjecterOptions struct {
 	Every               time.Duration
 	Sleep               time.Duration
@@ -104,8 +109,8 @@ func (r *SecondaryRateLimitInjecter) NextSleepStart() time.Time {
 
 func getSecondaryRateLimitBody() (io.ReadCloser, error) {
 	body := github_ratelimit.SecondaryRateLimitBody{
-		Message:     github_ratelimit.SecondaryRateLimitMessage,
-		DocumentURL: github_ratelimit.SecondaryRateLimitDocumentationURL,
+		Message:     SecondaryRateLimitMessage,
+		DocumentURL: SecondaryRateLimitDocumentationURL,
 	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
