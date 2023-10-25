@@ -18,6 +18,10 @@ const (
 	SecondaryRateLimitDocumentationPath = `/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
 )
 
+// IsSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.
+// It checks the prefix of the message and the suffix of the documentation URL in the response body in case
+// the message or documentation URL is modified in the future.
+// https://docs.github.com/en/rest/overview/resources-in-the-rest-api#secondary-rate-limits
 func (s SecondaryRateLimitBody) IsSecondaryRateLimit() bool {
 	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) && strings.HasSuffix(s.DocumentURL, SecondaryRateLimitDocumentationPath)
 }
