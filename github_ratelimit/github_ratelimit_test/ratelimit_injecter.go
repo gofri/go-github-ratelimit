@@ -17,12 +17,19 @@ const (
 	InvalidBodyContent = `{"message": "not as expected"}`
 )
 
+const (
+	SecondaryRateLimitMessage                   = `You have exceeded a secondary rate limit. Please wait a few minutes before you try again.`
+	SecondaryRateLimitDocumentationURL          = `https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
+	SecondaryRateLimitAlternateDocumentationURL = `https://docs.github.com/free-pro-team@latest/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
+)
+
 type SecondaryRateLimitInjecterOptions struct {
-	Every               time.Duration
-	Sleep               time.Duration
-	UseXRateLimit       bool
-	UsePrimaryRateLimit bool
-	InvalidBody         bool
+	Every                        time.Duration
+	Sleep                        time.Duration
+	InvalidBody                  bool
+	UseXRateLimit                bool
+	UsePrimaryRateLimit          bool
+	UseAlternateDocumentationURL bool
 }
 
 func NewRateLimitInjecter(base http.RoundTripper, options *SecondaryRateLimitInjecterOptions) (http.RoundTripper, error) {
@@ -102,10 +109,16 @@ func (r *SecondaryRateLimitInjecter) NextSleepStart() time.Time {
 	return r.blockUntil.Add(r.options.Every)
 }
 
-func getSecondaryRateLimitBody() (io.ReadCloser, error) {
+func getSecondaryRateLimitBody(useAlternatateDocumentationURL bool) (io.ReadCloser, error) {
+	documentURL := SecondaryRateLimitDocumentationURL
+
+	if useAlternatateDocumentationURL {
+		documentURL = SecondaryRateLimitAlternateDocumentationURL
+	}
+
 	body := github_ratelimit.SecondaryRateLimitBody{
-		Message:     github_ratelimit.SecondaryRateLimitMessage,
-		DocumentURL: github_ratelimit.SecondaryRateLimitDocumentationURL,
+		Message:     SecondaryRateLimitMessage,
+		DocumentURL: documentURL,
 	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
@@ -119,7 +132,7 @@ func (t *SecondaryRateLimitInjecter) inject(resp *http.Response) (*http.Response
 	if t.options.UsePrimaryRateLimit {
 		return t.toPrimaryRateLimitResponse(resp), nil
 	} else {
-		body, err := getSecondaryRateLimitBody()
+		body, err := getSecondaryRateLimitBody(t.options.UseAlternateDocumentationURL)
 		if err != nil {
 			return nil, err
 		}

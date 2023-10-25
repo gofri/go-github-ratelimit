@@ -103,6 +103,66 @@ func TestSecondaryRateLimit(t *testing.T) {
 	log.Printf("abuse requests: %v/%v (%v%%)\n", asInjecter.AbuseAttempts, requests, abusePrecent)
 }
 
+func TestSecondaryRateLimitBody(t *testing.T) {
+	t.Parallel()
+	const every = 1 * time.Second
+	const sleep = 1 * time.Second
+
+	slept := false
+	callback := func(*github_ratelimit.CallbackContext) {
+		slept = true
+	}
+
+	// test documentation URL
+	i := setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
+		Every:                        every,
+		Sleep:                        sleep,
+		UseAlternateDocumentationURL: false,
+	})
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// initialize injecter timing
+	_, _ = c.Get("/")
+	waitForNextSleep(i)
+
+	// attempt during rate limit
+	_, err = c.Get("/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slept {
+		t.Fatal(slept)
+	}
+
+	// test alternate documentation URL
+	slept = false
+	i = setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
+		Every:                        every,
+		Sleep:                        sleep,
+		UseAlternateDocumentationURL: true,
+	})
+	c, err = github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// initialize injecter timing
+	_, _ = c.Get("/")
+	waitForNextSleep(i)
+
+	// attempt during rate limit
+	_, err = c.Get("/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slept {
+		t.Fatal(slept)
+	}
+}
+
 func TestSingleSleepLimit(t *testing.T) {
 	t.Parallel()
 	const every = 1 * time.Second
@@ -335,7 +395,7 @@ func TestHTTPForbiddenIgnored(t *testing.T) {
 	_, _ = c.Get("/")
 	waitForNextSleep(i)
 
-	// attempt during rate limit (using invalid body, so the injction is of HTTP Foribdden)
+	// attempt during rate limit (using invalid body, so the injection is of HTTP Forbidden)
 	resp, err := c.Get("/")
 	if err != nil {
 		t.Fatal(err)
@@ -344,9 +404,9 @@ func TestHTTPForbiddenIgnored(t *testing.T) {
 		t.Fatal(slept)
 	}
 
-	if invaidBody, err := IsInvalidBody(resp); err != nil {
+	if invalidBody, err := IsInvalidBody(resp); err != nil {
 		t.Fatal(err)
-	} else if !invaidBody {
+	} else if !invalidBody {
 		t.Fatalf("expected invalid body")
 	}
 }
