@@ -395,7 +395,7 @@ func TestHTTPForbiddenIgnored(t *testing.T) {
 	_, _ = c.Get("/")
 	waitForNextSleep(i)
 
-	// attempt during rate limit (using invalid body, so the injction is of HTTP Foribdden)
+	// attempt during rate limit (using invalid body, so the injection is of HTTP Forbidden)
 	resp, err := c.Get("/")
 	if err != nil {
 		t.Fatal(err)
@@ -404,9 +404,9 @@ func TestHTTPForbiddenIgnored(t *testing.T) {
 		t.Fatal(slept)
 	}
 
-	if invaidBody, err := IsInvalidBody(resp); err != nil {
+	if invalidBody, err := IsInvalidBody(resp); err != nil {
 		t.Fatal(err)
-	} else if !invaidBody {
+	} else if !invalidBody {
 		t.Fatalf("expected invalid body")
 	}
 }
