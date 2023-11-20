@@ -23,7 +23,7 @@ const (
 // the message or documentation URL is modified in the future.
 // https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits
 func (s SecondaryRateLimitBody) IsSecondaryRateLimit() bool {
-	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) && strings.HasSuffix(s.DocumentURL, SecondaryRateLimitDocumentationPath)
+	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) || strings.HasSuffix(s.DocumentURL, SecondaryRateLimitDocumentationPath)
 }
 
 // isSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.
