@@ -18,18 +18,22 @@ const (
 )
 
 const (
-	SecondaryRateLimitMessage                   = `You have exceeded a secondary rate limit. Please wait a few minutes before you try again.`
-	SecondaryRateLimitDocumentationURL          = `https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
-	SecondaryRateLimitAlternateDocumentationURL = `https://docs.github.com/free-pro-team@latest/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
+	SecondaryRateLimitMessage = `You have exceeded a secondary rate limit. Please wait a few minutes before you try again.`
 )
 
+var SecondaryRateLimitDocumentationURLs = []string{
+	`https://docs.github.com/rest/overview/resources-in-the-rest-api#secondary-rate-limits`,
+	`https://docs.github.com/free-pro-team@latest/rest/overview/resources-in-the-rest-api#secondary-rate-limits`,
+	`https://docs.github.com/en/free-pro-team@latest/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits`,
+}
+
 type SecondaryRateLimitInjecterOptions struct {
-	Every                        time.Duration
-	Sleep                        time.Duration
-	InvalidBody                  bool
-	UseXRateLimit                bool
-	UsePrimaryRateLimit          bool
-	UseAlternateDocumentationURL bool
+	Every               time.Duration
+	Sleep               time.Duration
+	InvalidBody         bool
+	UseXRateLimit       bool
+	UsePrimaryRateLimit bool
+	DocumentationURL    string
 }
 
 func NewRateLimitInjecter(base http.RoundTripper, options *SecondaryRateLimitInjecterOptions) (http.RoundTripper, error) {
@@ -109,16 +113,14 @@ func (r *SecondaryRateLimitInjecter) NextSleepStart() time.Time {
 	return r.blockUntil.Add(r.options.Every)
 }
 
-func getSecondaryRateLimitBody(useAlternatateDocumentationURL bool) (io.ReadCloser, error) {
-	documentURL := SecondaryRateLimitDocumentationURL
-
-	if useAlternatateDocumentationURL {
-		documentURL = SecondaryRateLimitAlternateDocumentationURL
+func getSecondaryRateLimitBody(documentationURL string) (io.ReadCloser, error) {
+	if len(documentationURL) == 0 {
+		documentationURL = SecondaryRateLimitDocumentationURLs[0]
 	}
 
 	body := github_ratelimit.SecondaryRateLimitBody{
 		Message:     SecondaryRateLimitMessage,
-		DocumentURL: documentURL,
+		DocumentURL: documentationURL,
 	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
@@ -132,7 +134,7 @@ func (t *SecondaryRateLimitInjecter) inject(resp *http.Response) (*http.Response
 	if t.options.UsePrimaryRateLimit {
 		return t.toPrimaryRateLimitResponse(resp), nil
 	} else {
-		body, err := getSecondaryRateLimitBody(t.options.UseAlternateDocumentationURL)
+		body, err := getSecondaryRateLimitBody(t.options.DocumentationURL)
 		if err != nil {
 			return nil, err
 		}
