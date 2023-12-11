@@ -14,16 +14,16 @@ type SecondaryRateLimitBody struct {
 }
 
 const (
-	SecondaryRateLimitMessage           = `You have exceeded a secondary rate limit`
-	SecondaryRateLimitDocumentationPath = `/rest/overview/resources-in-the-rest-api#secondary-rate-limits`
+	SecondaryRateLimitMessage                 = `You have exceeded a secondary rate limit`
+	SecondaryRateLimitDocumentationPathSuffix = `secondary-rate-limits`
 )
 
 // IsSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.
 // It checks the prefix of the message and the suffix of the documentation URL in the response body in case
 // the message or documentation URL is modified in the future.
-// https://docs.github.com/en/rest/overview/resources-in-the-rest-api#secondary-rate-limits
+// https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits
 func (s SecondaryRateLimitBody) IsSecondaryRateLimit() bool {
-	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) && strings.HasSuffix(s.DocumentURL, SecondaryRateLimitDocumentationPath)
+	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) || strings.HasSuffix(s.DocumentURL, SecondaryRateLimitDocumentationPathSuffix)
 }
 
 // isSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.

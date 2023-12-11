@@ -108,58 +108,40 @@ func TestSecondaryRateLimitBody(t *testing.T) {
 	const every = 1 * time.Second
 	const sleep = 1 * time.Second
 
-	slept := false
-	callback := func(*github_ratelimit.CallbackContext) {
-		slept = true
-	}
+	for i, docURL := range SecondaryRateLimitDocumentationURLs {
+		docURL := docURL
+		t.Run(fmt.Sprintf("docURL_%d", i), func(t *testing.T) {
+			t.Parallel()
 
-	// test documentation URL
-	i := setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
-		Every:                        every,
-		Sleep:                        sleep,
-		UseAlternateDocumentationURL: false,
-	})
-	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
-	if err != nil {
-		t.Fatal(err)
-	}
+			slept := false
+			callback := func(*github_ratelimit.CallbackContext) {
+				slept = true
+			}
 
-	// initialize injecter timing
-	_, _ = c.Get("/")
-	waitForNextSleep(i)
+			// test documentation URL
+			i := setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
+				Every:            every,
+				Sleep:            sleep,
+				DocumentationURL: docURL,
+			})
+			c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	// attempt during rate limit
-	_, err = c.Get("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slept {
-		t.Fatal(slept)
-	}
+			// initialize injecter timing
+			_, _ = c.Get("/")
+			waitForNextSleep(i)
 
-	// test alternate documentation URL
-	slept = false
-	i = setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
-		Every:                        every,
-		Sleep:                        sleep,
-		UseAlternateDocumentationURL: true,
-	})
-	c, err = github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// initialize injecter timing
-	_, _ = c.Get("/")
-	waitForNextSleep(i)
-
-	// attempt during rate limit
-	_, err = c.Get("/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slept {
-		t.Fatal(slept)
+			// attempt during rate limit
+			_, err = c.Get("/")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slept {
+				t.Fatal(slept)
+			}
+		})
 	}
 }
 
