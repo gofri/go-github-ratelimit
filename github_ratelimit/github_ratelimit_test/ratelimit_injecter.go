@@ -27,6 +27,11 @@ var SecondaryRateLimitDocumentationURLs = []string{
 	`https://docs.github.com/en/free-pro-team@latest/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits`,
 }
 
+var SecondaryRateLimitStatusCodes = []int{
+	http.StatusForbidden,
+	http.StatusTooManyRequests,
+}
+
 type SecondaryRateLimitInjecterOptions struct {
 	Every               time.Duration
 	Sleep               time.Duration
@@ -34,6 +39,7 @@ type SecondaryRateLimitInjecterOptions struct {
 	UseXRateLimit       bool
 	UsePrimaryRateLimit bool
 	DocumentationURL    string
+	HttpStatusCode      int
 }
 
 func NewRateLimitInjecter(base http.RoundTripper, options *SecondaryRateLimitInjecterOptions) (http.RoundTripper, error) {
@@ -130,6 +136,13 @@ func getSecondaryRateLimitBody(documentationURL string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(bodyBytes)), nil
 }
 
+func getHttpStatusCode(statusCode int) int {
+	if statusCode == 0 {
+		return SecondaryRateLimitStatusCodes[0]
+	}
+	return statusCode
+}
+
 func (t *SecondaryRateLimitInjecter) inject(resp *http.Response) (*http.Response, error) {
 	if t.options.UsePrimaryRateLimit {
 		return t.toPrimaryRateLimitResponse(resp), nil
@@ -142,7 +155,7 @@ func (t *SecondaryRateLimitInjecter) inject(resp *http.Response) (*http.Response
 			body = io.NopCloser(bytes.NewReader([]byte(InvalidBodyContent)))
 		}
 
-		resp.StatusCode = http.StatusForbidden
+		resp.StatusCode = getHttpStatusCode(t.options.HttpStatusCode)
 		resp.Body = body
 		if t.options.UseXRateLimit {
 			return t.toXRateLimitResponse(resp), nil

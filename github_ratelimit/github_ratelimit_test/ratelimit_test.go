@@ -103,45 +103,49 @@ func TestSecondaryRateLimit(t *testing.T) {
 	log.Printf("abuse requests: %v/%v (%v%%)\n", asInjecter.AbuseAttempts, requests, abusePrecent)
 }
 
-func TestSecondaryRateLimitBody(t *testing.T) {
+func TestSecondaryRateLimitCombinations(t *testing.T) {
 	t.Parallel()
 	const every = 1 * time.Second
 	const sleep = 1 * time.Second
 
 	for i, docURL := range SecondaryRateLimitDocumentationURLs {
 		docURL := docURL
-		t.Run(fmt.Sprintf("docURL_%d", i), func(t *testing.T) {
-			t.Parallel()
+		for j, statusCode := range SecondaryRateLimitStatusCodes {
+			statusCode := statusCode
+			t.Run(fmt.Sprintf("docURL_%d_%d", i, j), func(t *testing.T) {
+				t.Parallel()
 
-			slept := false
-			callback := func(*github_ratelimit.CallbackContext) {
-				slept = true
-			}
+				slept := false
+				callback := func(*github_ratelimit.CallbackContext) {
+					slept = true
+				}
 
-			// test documentation URL
-			i := setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
-				Every:            every,
-				Sleep:            sleep,
-				DocumentationURL: docURL,
+				// test documentation URL
+				i := setupInjecterWithOptions(t, SecondaryRateLimitInjecterOptions{
+					Every:            every,
+					Sleep:            sleep,
+					DocumentationURL: docURL,
+					HttpStatusCode:   statusCode,
+				})
+				c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				// initialize injecter timing
+				_, _ = c.Get("/")
+				waitForNextSleep(i)
+
+				// attempt during rate limit
+				_, err = c.Get("/")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !slept {
+					t.Fatal(slept)
+				}
 			})
-			c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// initialize injecter timing
-			_, _ = c.Get("/")
-			waitForNextSleep(i)
-
-			// attempt during rate limit
-			_, err = c.Get("/")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !slept {
-				t.Fatal(slept)
-			}
-		})
+		}
 	}
 }
 
