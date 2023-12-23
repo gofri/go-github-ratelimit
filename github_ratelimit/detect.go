@@ -23,13 +23,20 @@ const (
 // the message or documentation URL is modified in the future.
 // https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits
 func (s SecondaryRateLimitBody) IsSecondaryRateLimit() bool {
-	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) || strings.HasSuffix(s.DocumentURL, SecondaryRateLimitDocumentationPathSuffix)
+	return strings.HasPrefix(s.Message, SecondaryRateLimitMessage) ||
+		strings.HasSuffix(s.DocumentURL, SecondaryRateLimitDocumentationPathSuffix)
+}
+
+// isRateLimitStatus checks whether the status code is a rate limit status code.
+// see https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit
+func isRateLimitStatus(statusCode int) bool {
+	return statusCode == http.StatusForbidden || statusCode == http.StatusTooManyRequests
 }
 
 // isSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.
 // it is used to avoid handling primary rate limits and authentic HTTP Forbidden (403) responses.
 func isSecondaryRateLimit(resp *http.Response) bool {
-	if resp.StatusCode != http.StatusForbidden {
+	if !isRateLimitStatus(resp.StatusCode) {
 		return false
 	}
 
