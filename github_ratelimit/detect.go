@@ -34,7 +34,6 @@ func isRateLimitStatus(statusCode int) bool {
 }
 
 // isSecondaryRateLimit checks whether the response is a legitimate secondary rate limit.
-// it is used to avoid handling primary rate limits and authentic HTTP Forbidden (403) responses.
 func isSecondaryRateLimit(resp *http.Response) bool {
 	if !isRateLimitStatus(resp.StatusCode) {
 		return false
@@ -49,7 +48,7 @@ func isSecondaryRateLimit(resp *http.Response) bool {
 		return false
 	}
 
-	// an authentic HTTP Forbidden (403) response
+	// an authentic HTTP response (not a primary rate limit)
 	defer resp.Body.Close()
 	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {
