@@ -172,7 +172,7 @@ func parseSecondaryLimitTime(resp *http.Response) *time.Time {
 		return sleepUntil
 	}
 
-	// XXX: per GitHub API docs, we should default to a 60 second sleep time in case the header is missing,
+	// XXX: per GitHub API docs, we should default to a 60 seconds sleep time in case the header is missing,
 	//		with an exponential backoff mechanism.
 	//		we may want to implement this in the future (with configurable limits),
 	//		but let's avoid it while there are no known cases of missing headers.
