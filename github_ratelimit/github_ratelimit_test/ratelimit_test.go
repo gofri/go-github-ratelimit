@@ -1,6 +1,7 @@
 package github_ratelimit_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -460,4 +461,80 @@ func TestCallbackContext(t *testing.T) {
 		}
 	}
 	close(errChan)
+}
+
+func TestRequestConfigOverride(t *testing.T) {
+	t.Parallel()
+	const every = 1 * time.Second
+	const sleep = 1 * time.Second
+
+	slept := false
+	callback := func(*github_ratelimit.CallbackContext) {
+		slept = true
+	}
+	exceeded := false
+	onLimitExceeded := func(*github_ratelimit.CallbackContext) {
+		exceeded = true
+	}
+
+	// test sleep is short enough
+	i := setupSecondaryLimitInjecter(t, every, sleep)
+	c, err := github_ratelimit.NewRateLimitWaiterClient(i,
+		github_ratelimit.WithLimitDetectedCallback(callback),
+		github_ratelimit.WithSingleSleepLimit(5*time.Second, onLimitExceeded))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// initialize injecter timing
+	_, _ = c.Get("/")
+
+	// prepare an override - force sleep time to be 0,
+	// so that it will not sleep at all regardless of the original config.
+	limit := github_ratelimit.WithSingleSleepLimit(0, onLimitExceeded)
+	ctx := github_ratelimit.WithOverrideConfig(context.Background(), limit)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// wait for next sleep to kick in, but issue the request with the override
+	waitForNextSleep(i)
+
+	// attempt during rate limit
+	slept = false
+	exceeded = false
+	_, err = c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// expect no sleep because the override is set to 0
+	if slept || !exceeded {
+		t.Fatal(slept, exceeded)
+	}
+
+	// prepare an override with a different nature (extra safety check)
+	exceeded = false
+	usedAltCallback := false
+	onSleepAlt := func(*github_ratelimit.CallbackContext) {
+		usedAltCallback = true
+	}
+
+	limit = github_ratelimit.WithSingleSleepLimit(10*time.Second, onLimitExceeded)
+	sleepCB := github_ratelimit.WithLimitDetectedCallback(onSleepAlt)
+	ctx = github_ratelimit.WithOverrideConfig(context.Background(), limit, sleepCB)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// attempt during rate limit
+	_, err = c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !usedAltCallback || exceeded {
+		t.Fatal(slept, exceeded)
+	}
+
 }
