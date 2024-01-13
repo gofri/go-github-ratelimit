@@ -1,7 +1,6 @@
 package github_ratelimit
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"sync"
@@ -9,20 +8,11 @@ import (
 )
 
 type SecondaryRateLimitWaiter struct {
-	Base       http.RoundTripper
-	sleepUntil *time.Time
-	lock       sync.RWMutex
-
-	// limits
-	totalSleepTime   time.Duration
-	singleSleepLimit *time.Duration
-	totalSleepLimit  *time.Duration
-
-	// callbacks
-	userContext           *context.Context
-	onLimitDetected       OnLimitDetected
-	onSingleLimitExceeded OnSingleLimitExceeded
-	onTotalLimitExceeded  OnTotalLimitExceeded
+	Base           http.RoundTripper
+	sleepUntil     *time.Time
+	lock           sync.RWMutex
+	totalSleepTime time.Duration
+	config         *SecondaryRateLimitConfig
 }
 
 func NewRateLimitWaiter(base http.RoundTripper, opts ...Option) (*SecondaryRateLimitWaiter, error) {
@@ -31,9 +21,9 @@ func NewRateLimitWaiter(base http.RoundTripper, opts ...Option) (*SecondaryRateL
 	}
 
 	waiter := SecondaryRateLimitWaiter{
-		Base: base,
+		Base:   base,
+		config: newConfig(opts...),
 	}
-	applyOptions(&waiter, opts...)
 
 	return &waiter, nil
 }
@@ -56,7 +46,7 @@ func NewRateLimitWaiterClient(base http.RoundTripper, opts ...Option) (*http.Cli
 // Nonetheless, there is no way to prevent subtle race conditions without completely serializing the requests,
 // so we prefer to let some slip in case of a race condition, i.e.,
 // after a retry-after response is received and before it is processed,
-// a few other (parallel) requests may be issued.
+// a few other (concurrent) requests may be issued.
 func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Response, error) {
 	t.waitForRateLimit()
 
@@ -83,20 +73,31 @@ func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Respo
 	return t.RoundTrip(request)
 }
 
+func (t *SecondaryRateLimitWaiter) getRequestConfig(request *http.Request) *SecondaryRateLimitConfig {
+	overrides := GetConfigOverrides(request.Context())
+	if overrides == nil {
+		// no config override - use the default config (zero-copy)
+		return t.config
+	}
+	reqConfig := *t.config
+	reqConfig.ApplyOptions(overrides...)
+	return &reqConfig
+}
+
 // waitForRateLimit waits for the cooldown time to finish if a secondary rate limit is active.
 func (t *SecondaryRateLimitWaiter) waitForRateLimit() {
 	t.lock.RLock()
-	sleepTime := t.currentSleepTimeUnlocked()
+	sleepDuration := t.currentSleepDurationUnlocked()
 	t.lock.RUnlock()
 
-	time.Sleep(sleepTime)
+	time.Sleep(sleepDuration)
 }
 
 // updateRateLimit updates the active rate limit and triggers user callbacks if needed.
 // the rate limit is not updated if there is already an active rate limit.
 // it never waits because the retry handles sleeping anyway.
 // returns whether or not to retry the request.
-func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, callbackContext *CallbackContext) bool {
+func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, callbackContext *CallbackContext) (needRetry bool) {
 	// quick check without the lock: maybe the secondary limit just passed
 	if time.Now().After(secondaryLimit) {
 		return true
@@ -106,37 +107,39 @@ func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, cal
 	defer t.lock.Unlock()
 
 	// check before update if there is already an active rate limit
-	if t.currentSleepTimeUnlocked() > 0 {
+	if t.currentSleepDurationUnlocked() > 0 {
 		return true
 	}
 
 	// check if the secondary rate limit happened to have passed while we waited for the lock
-	sleepTime := time.Until(secondaryLimit)
-	if sleepTime <= 0 {
+	sleepDuration := time.Until(secondaryLimit)
+	if sleepDuration <= 0 {
 		return true
 	}
 
+	config := t.getRequestConfig(callbackContext.Request)
+
 	// do not sleep in case it is above the single sleep limit
-	if t.singleSleepLimit != nil && sleepTime > *t.singleSleepLimit {
-		t.triggerCallback(t.onSingleLimitExceeded, callbackContext, secondaryLimit)
+	if config.IsAboveSingleSleepLimit(sleepDuration) {
+		t.triggerCallback(config.onSingleLimitExceeded, callbackContext, secondaryLimit)
 		return false
 	}
 
 	// do not sleep in case it is above the total sleep limit
-	if t.totalSleepLimit != nil && t.totalSleepTime+sleepTime > *t.totalSleepLimit {
-		t.triggerCallback(t.onTotalLimitExceeded, callbackContext, secondaryLimit)
+	if config.IsAboveTotalSleepLimit(sleepDuration, t.totalSleepTime) {
+		t.triggerCallback(config.onTotalLimitExceeded, callbackContext, secondaryLimit)
 		return false
 	}
 
 	// a legitimate new limit
 	t.sleepUntil = &secondaryLimit
-	t.totalSleepTime += smoothSleepTime(sleepTime)
-	t.triggerCallback(t.onLimitDetected, callbackContext, secondaryLimit)
+	t.totalSleepTime += smoothSleepTime(sleepDuration)
+	t.triggerCallback(config.onLimitDetected, callbackContext, secondaryLimit)
 
 	return true
 }
 
-func (t *SecondaryRateLimitWaiter) currentSleepTimeUnlocked() time.Duration {
+func (t *SecondaryRateLimitWaiter) currentSleepDurationUnlocked() time.Duration {
 	if t.sleepUntil == nil {
 		return 0
 	}
@@ -149,7 +152,6 @@ func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContex
 	}
 
 	callbackContext.RoundTripper = t
-	callbackContext.UserContext = t.userContext
 	callbackContext.SleepUntil = &newSleepUntil
 	callbackContext.TotalSleepTime = &t.totalSleepTime
 
@@ -207,6 +209,7 @@ func parseXRateLimitReset(resp *http.Response) *time.Time {
 	return &sleepUntil
 }
 
+// httpHeaderIntValue parses an integer value from the given HTTP header.
 func httpHeaderIntValue(header http.Header, key string) (int64, bool) {
 	val := header.Get(key)
 	if val == "" {
