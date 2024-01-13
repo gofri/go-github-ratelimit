@@ -44,6 +44,8 @@ The RoundTripper accepts a set of optional callbacks:
 - On Single Limit Exceeded: callback for when a rate limit that exceeds the single sleep limit is detected.
 - On Total Limit Exceeded: callback for when a rate limit that exceeds the total sleep limit is detected.
 
+note: to detect secondary rate limits and take a custom action without sleeping, use SingleSleepLimit=0 and OnSingleLimitExceeded().
+
 ## License
 This package is distributed under the MIT license found in the LICENSE file.  
 Contribution and feedback is welcome.
