@@ -46,7 +46,7 @@ func NewRateLimitWaiterClient(base http.RoundTripper, opts ...Option) (*http.Cli
 // Nonetheless, there is no way to prevent subtle race conditions without completely serializing the requests,
 // so we prefer to let some slip in case of a race condition, i.e.,
 // after a retry-after response is received and before it is processed,
-// a few other (parallel) requests may be issued.
+// a few other (concurrent) requests may be issued.
 func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Response, error) {
 	t.waitForRateLimit()
 
@@ -87,10 +87,10 @@ func (t *SecondaryRateLimitWaiter) getRequestConfig(request *http.Request) *Seco
 // waitForRateLimit waits for the cooldown time to finish if a secondary rate limit is active.
 func (t *SecondaryRateLimitWaiter) waitForRateLimit() {
 	t.lock.RLock()
-	sleepTime := t.currentSleepTimeUnlocked()
+	sleepDuration := t.currentSleepDurationUnlocked()
 	t.lock.RUnlock()
 
-	time.Sleep(sleepTime)
+	time.Sleep(sleepDuration)
 }
 
 // updateRateLimit updates the active rate limit and triggers user callbacks if needed.
@@ -107,39 +107,39 @@ func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, cal
 	defer t.lock.Unlock()
 
 	// check before update if there is already an active rate limit
-	if t.currentSleepTimeUnlocked() > 0 {
+	if t.currentSleepDurationUnlocked() > 0 {
 		return true
 	}
 
 	// check if the secondary rate limit happened to have passed while we waited for the lock
-	sleepTime := time.Until(secondaryLimit)
-	if sleepTime <= 0 {
+	sleepDuration := time.Until(secondaryLimit)
+	if sleepDuration <= 0 {
 		return true
 	}
 
 	config := t.getRequestConfig(callbackContext.Request)
 
 	// do not sleep in case it is above the single sleep limit
-	if config.IsAboveSingleSleepLimit(sleepTime) {
+	if config.IsAboveSingleSleepLimit(sleepDuration) {
 		t.triggerCallback(config.onSingleLimitExceeded, callbackContext, secondaryLimit)
 		return false
 	}
 
 	// do not sleep in case it is above the total sleep limit
-	if config.IsAboveTotalSleepLimit(sleepTime, t.totalSleepTime) {
+	if config.IsAboveTotalSleepLimit(sleepDuration, t.totalSleepTime) {
 		t.triggerCallback(config.onTotalLimitExceeded, callbackContext, secondaryLimit)
 		return false
 	}
 
 	// a legitimate new limit
 	t.sleepUntil = &secondaryLimit
-	t.totalSleepTime += smoothSleepTime(sleepTime)
+	t.totalSleepTime += smoothSleepTime(sleepDuration)
 	t.triggerCallback(config.onLimitDetected, callbackContext, secondaryLimit)
 
 	return true
 }
 
-func (t *SecondaryRateLimitWaiter) currentSleepTimeUnlocked() time.Duration {
+func (t *SecondaryRateLimitWaiter) currentSleepDurationUnlocked() time.Duration {
 	if t.sleepUntil == nil {
 		return 0
 	}
