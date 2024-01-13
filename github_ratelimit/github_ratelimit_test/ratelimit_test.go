@@ -1,7 +1,6 @@
 package github_ratelimit_test
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -403,19 +402,12 @@ func TestCallbackContext(t *testing.T) {
 	const sleep = 1 * time.Second
 	i := setupSecondaryLimitInjecter(t, every, sleep)
 
-	ctxKey := struct{}{}
-	ctxVal := 10
-	userContext := context.WithValue(context.Background(), ctxKey, ctxVal)
 	var roundTripper *github_ratelimit.SecondaryRateLimitWaiter = nil
 	var requestNum atomic.Int64
 	requestNum.Add(1)
 	requestsCycle := 1
 
 	callback := func(ctx *github_ratelimit.CallbackContext) {
-		val := (*ctx.UserContext).Value(ctxKey).(int)
-		if val != ctxVal {
-			t.Fatalf("user ctx mismatch: %v != %v", val, ctxVal)
-		}
 		if got, want := ctx.RoundTripper, roundTripper; got != want {
 			t.Fatalf("roundtripper mismatch: %v != %v", got, want)
 		}
@@ -432,7 +424,6 @@ func TestCallbackContext(t *testing.T) {
 	}
 
 	r, err := github_ratelimit.NewRateLimitWaiter(i,
-		github_ratelimit.WithUserContext(userContext),
 		github_ratelimit.WithLimitDetectedCallback(callback),
 	)
 	if err != nil {

@@ -1,7 +1,6 @@
 package github_ratelimit
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"sync"
@@ -19,7 +18,6 @@ type SecondaryRateLimitWaiter struct {
 	totalSleepLimit  *time.Duration
 
 	// callbacks
-	userContext           *context.Context
 	onLimitDetected       OnLimitDetected
 	onSingleLimitExceeded OnSingleLimitExceeded
 	onTotalLimitExceeded  OnTotalLimitExceeded
@@ -149,7 +147,6 @@ func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContex
 	}
 
 	callbackContext.RoundTripper = t
-	callbackContext.UserContext = t.userContext
 	callbackContext.SleepUntil = &newSleepUntil
 	callbackContext.TotalSleepTime = &t.totalSleepTime
 

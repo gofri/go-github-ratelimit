@@ -1,7 +1,6 @@
 package github_ratelimit
 
 import (
-	"context"
 	"time"
 )
 
@@ -29,13 +28,6 @@ func WithTotalSleepLimit(limit time.Duration, callback OnTotalLimitExceeded) Opt
 	return func(t *SecondaryRateLimitWaiter) {
 		t.totalSleepLimit = &limit
 		t.onTotalLimitExceeded = callback
-	}
-}
-
-// WithUserContext sets the user context to be passed to callbacks.
-func WithUserContext(ctx context.Context) Option {
-	return func(t *SecondaryRateLimitWaiter) {
-		t.userContext = &ctx
 	}
 }
 
