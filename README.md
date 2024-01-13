@@ -46,6 +46,11 @@ The RoundTripper accepts a set of optional callbacks:
 
 note: to detect secondary rate limits and take a custom action without sleeping, use SingleSleepLimit=0 and OnSingleLimitExceeded().
 
+## Per-Request Options
+Use WithOverrideConfig() to override the configuration for a specific request using a context.
+Per-request overrides may be useful for special-cases of user requests,
+as well as fine-grained policy control (e.g., for a sophisticated pagination mechanism).
+
 ## License
 This package is distributed under the MIT license found in the LICENSE file.  
 Contribution and feedback is welcome.
