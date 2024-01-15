@@ -45,7 +45,7 @@ func isSecondaryRateLimit(resp *http.Response) bool {
 
 	// a primary rate limit
 	if remaining, ok := httpHeaderIntValue(resp.Header, HeaderXRateLimitRemaining); ok && remaining == 0 {
-		return false
+		return true
 	}
 
 	// an authentic HTTP response (not a primary rate limit)
