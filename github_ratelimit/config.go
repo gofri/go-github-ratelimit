@@ -35,12 +35,12 @@ func (c *SecondaryRateLimitConfig) ApplyOptions(opts ...Option) {
 	}
 }
 
-// IsAboveSingleSleepLimit returns true if the single sleep time is above the limit.
+// IsAboveSingleSleepLimit returns true if the single sleep duration is above the limit.
 func (c *SecondaryRateLimitConfig) IsAboveSingleSleepLimit(sleepTime time.Duration) bool {
 	return c.singleSleepLimit != nil && sleepTime > *c.singleSleepLimit
 }
 
-// IsAboveTotalSleepLimit returns true if the total sleep time is above the limit.
+// IsAboveTotalSleepLimit returns true if the total sleep duration is above the limit.
 func (c *SecondaryRateLimitConfig) IsAboveTotalSleepLimit(sleepTime time.Duration, totalSleepTime time.Duration) bool {
 	return c.totalSleepLimit != nil && totalSleepTime+sleepTime > *c.totalSleepLimit
 }

@@ -1,7 +1,9 @@
 package github_ratelimit_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gofri/go-github-ratelimit/github_ratelimit"
+	"github.com/google/go-github/v58/github"
 )
 
 type nopServer struct {
@@ -31,16 +34,19 @@ func (n *nopServer) RoundTrip(r *http.Request) (*http.Response, error) {
 	}, nil
 }
 
-func setupSecondaryLimitInjecter(t *testing.T, every time.Duration, sleep time.Duration) http.RoundTripper {
+func setupSecondaryLimitInjecter(t *testing.T, every time.Duration, sleep time.Duration, roundTrippger http.RoundTripper) http.RoundTripper {
 	options := SecondaryRateLimitInjecterOptions{
 		Every: every,
 		Sleep: sleep,
 	}
-	return setupInjecterWithOptions(t, options)
+	return setupInjecterWithOptions(t, options, roundTrippger)
 }
 
-func setupInjecterWithOptions(t *testing.T, options SecondaryRateLimitInjecterOptions) http.RoundTripper {
-	i, err := NewRateLimitInjecter(&nopServer{}, &options)
+func setupInjecterWithOptions(t *testing.T, options SecondaryRateLimitInjecterOptions, roundTrippger http.RoundTripper) http.RoundTripper {
+	if roundTrippger == nil {
+		roundTrippger = &nopServer{}
+	}
+	i, err := NewRateLimitInjecter(roundTrippger, &options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +72,7 @@ func TestSecondaryRateLimit(t *testing.T) {
 			time.Until(*context.SleepUntil).Seconds(), time.Now(), *context.SleepUntil)
 	}
 
-	i := setupSecondaryLimitInjecter(t, every, sleep)
+	i := setupSecondaryLimitInjecter(t, every, sleep, nil)
 	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(print))
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +132,7 @@ func TestSecondaryRateLimitCombinations(t *testing.T) {
 					Sleep:            sleep,
 					DocumentationURL: docURL,
 					HttpStatusCode:   statusCode,
-				})
+				}, nil)
 				c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
 				if err != nil {
 					t.Fatal(err)
@@ -164,7 +170,7 @@ func TestSingleSleepLimit(t *testing.T) {
 	}
 
 	// test sleep is short enough
-	i := setupSecondaryLimitInjecter(t, every, sleep)
+	i := setupSecondaryLimitInjecter(t, every, sleep, nil)
 	c, err := github_ratelimit.NewRateLimitWaiterClient(i,
 		github_ratelimit.WithLimitDetectedCallback(callback),
 		github_ratelimit.WithSingleSleepLimit(5*time.Second, onLimitExceeded))
@@ -187,7 +193,7 @@ func TestSingleSleepLimit(t *testing.T) {
 
 	// test sleep is too long
 	slept = false
-	i = setupSecondaryLimitInjecter(t, every, sleep)
+	i = setupSecondaryLimitInjecter(t, every, sleep, nil)
 	c, err = github_ratelimit.NewRateLimitWaiterClient(i,
 		github_ratelimit.WithLimitDetectedCallback(callback),
 		github_ratelimit.WithSingleSleepLimit(sleep/2, onLimitExceeded))
@@ -238,7 +244,7 @@ func TestTotalSleepLimit(t *testing.T) {
 	}
 
 	// test sleep is short enough
-	i := setupSecondaryLimitInjecter(t, every, sleep)
+	i := setupSecondaryLimitInjecter(t, every, sleep, nil)
 	c, err := github_ratelimit.NewRateLimitWaiterClient(i,
 		github_ratelimit.WithLimitDetectedCallback(callback),
 		github_ratelimit.WithTotalSleepLimit(time.Second+time.Second/2, onLimitExceeded))
@@ -300,7 +306,7 @@ func TestXRateLimit(t *testing.T) {
 		Every:         every,
 		Sleep:         sleep,
 		UseXRateLimit: true,
-	})
+	}, nil)
 	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
 	if err != nil {
 		t.Fatal(err)
@@ -335,7 +341,7 @@ func TestPrimaryRateLimitIgnored(t *testing.T) {
 		Every:               every,
 		Sleep:               sleep,
 		UsePrimaryRateLimit: true,
-	})
+	}, nil)
 	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
 	if err != nil {
 		t.Fatal(err)
@@ -370,7 +376,7 @@ func TestHTTPForbiddenIgnored(t *testing.T) {
 		Every:       every,
 		Sleep:       sleep,
 		InvalidBody: true,
-	})
+	}, nil)
 
 	c, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(callback))
 	if err != nil {
@@ -401,7 +407,7 @@ func TestCallbackContext(t *testing.T) {
 	t.Parallel()
 	const every = 1 * time.Second
 	const sleep = 1 * time.Second
-	i := setupSecondaryLimitInjecter(t, every, sleep)
+	i := setupSecondaryLimitInjecter(t, every, sleep, nil)
 
 	var roundTripper *github_ratelimit.SecondaryRateLimitWaiter = nil
 	var requestNum atomic.Int64
@@ -419,7 +425,7 @@ func TestCallbackContext(t *testing.T) {
 			t.Fatalf("unexpected sleep until time: %v < %v <= %v", min, got, max)
 		}
 		if got, want := *ctx.TotalSleepTime, sleep*time.Duration(requestsCycle); got != want {
-			t.Fatalf("unexpected total sleep time: %v != %v", got, want)
+			t.Fatalf("unexpected total sleep duration: %v != %v", got, want)
 		}
 		requestNum.Add(1)
 	}
@@ -478,7 +484,7 @@ func TestRequestConfigOverride(t *testing.T) {
 	}
 
 	// test sleep is short enough
-	i := setupSecondaryLimitInjecter(t, every, sleep)
+	i := setupSecondaryLimitInjecter(t, every, sleep, nil)
 	c, err := github_ratelimit.NewRateLimitWaiterClient(i,
 		github_ratelimit.WithLimitDetectedCallback(callback),
 		github_ratelimit.WithSingleSleepLimit(5*time.Second, onLimitExceeded))
@@ -489,7 +495,7 @@ func TestRequestConfigOverride(t *testing.T) {
 	// initialize injecter timing
 	_, _ = c.Get("/")
 
-	// prepare an override - force sleep time to be 0,
+	// prepare an override - force sleep duration to be 0,
 	// so that it will not sleep at all regardless of the original config.
 	limit := github_ratelimit.WithSingleSleepLimit(0, onLimitExceeded)
 	ctx := github_ratelimit.WithOverrideConfig(context.Background(), limit)
@@ -537,4 +543,71 @@ func TestRequestConfigOverride(t *testing.T) {
 		t.Fatal(slept, exceeded)
 	}
 
+}
+
+type orgLister struct {
+}
+
+func (o *orgLister) GetOrgName() string {
+	return "org"
+}
+
+func (o *orgLister) RoundTrip(r *http.Request) (*http.Response, error) {
+	org := github.Organization{
+		Login: github.String(o.GetOrgName()),
+	}
+
+	body, err := json.Marshal([]*github.Organization{&org})
+	if err != nil {
+		return nil, err
+	}
+
+	return &http.Response{
+		Body:       io.NopCloser(bytes.NewReader(body)),
+		Header:     http.Header{},
+		StatusCode: http.StatusOK,
+	}, nil
+}
+
+// TestGoGithubClient is a test that uses the go-github client.
+func TestGoGithubClientCompatability(t *testing.T) {
+	t.Parallel()
+	rand.Seed(time.Now().UnixNano())
+	const every = 5 * time.Second
+	const sleep = 1 * time.Second
+
+	print := func(context *github_ratelimit.CallbackContext) {
+		log.Printf("Secondary rate limit reached! Sleeping for %.2f seconds [%v --> %v]",
+			time.Until(*context.SleepUntil).Seconds(), time.Now(), *context.SleepUntil)
+	}
+
+	orgLister := &orgLister{}
+
+	i := setupSecondaryLimitInjecter(t, every, sleep, orgLister)
+	rateLimiter, err := github_ratelimit.NewRateLimitWaiterClient(i, github_ratelimit.WithLimitDetectedCallback(print))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := github.NewClient(rateLimiter)
+	orgs, resp, err := client.Organizations.List(context.Background(), "", nil)
+	if err != nil {
+		t.Fatalf("unexpected error response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code: %v", resp.StatusCode)
+	}
+
+	if len(orgs) != 1 {
+		t.Fatalf("unexpected number of orgs: %v", len(orgs))
+	}
+
+	if orgs[0].GetLogin() != orgLister.GetOrgName() {
+		t.Fatalf("unexpected org name: %v", orgs[0].GetLogin())
+	}
+
+	// TODO add tests for:
+	// - WithSingleSleepLimit(0, ...) => expect AbuseError
+	// - WithSingleSleepLimit(>0, ...) => expect sleeping
 }
