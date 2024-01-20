@@ -6,51 +6,47 @@ Package `go-github-ratelimit` provides an http.RoundTripper implementation that 
 The RoundTripper waits for the secondary rate limit to finish in a blocking mode and then issues/retries requests.
 
 `go-github-ratelimit` can be used with any HTTP client communicating with GitHub API.    
-It is meant to complement [go-github](https://github.com/google/go-github), but there is no association between this repository and the go-github repository or Google.  
+It is meant to complement [go-github](https://github.com/google/go-github), but there is no association between this repository and the go-github repository nor Google.  
   
 ## Installation
+
 ```go get github.com/gofri/go-github-ratelimit```
 
-## Usage Example (with go-github and [oauth2](golang.org/x/oauth2))
+## Usage Example (with [go-github](https://github.com/google/go-github))
+
 ```go
-import "github.com/google/go-github/github"
-import "golang.org/x/oauth2"
+import "github.com/google/go-github/v58/github"
 import "github.com/gofri/go-github-ratelimit/github_ratelimit"
 
 func main() {
-  ctx := context.Background()
-  ts := oauth2.StaticTokenSource(
-    oauth2.Token{AccessToken: "Your Personal Access Token"},
-  )
-  tc := oauth2.NewClient(ctx, ts)
-  rateLimiter, err := github_ratelimit.NewRateLimitWaiterClient(tc.Transport)
+  rateLimiter, err := github_ratelimit.NewRateLimitWaiterClient(nil)
   if err != nil {
     panic(err)
   }
-  client := github.NewClient(rateLimiter)
+  client := github.NewClient(rateLimiter).WithAuthToken("your personal access token")
 
   // now use the client as you please
 }
 ```
 
 ## Options
-The RoundTripper accepts a set of options:
-- User Context: provide a context.Context to pass to callbacks.
-- Single Sleep Limit: limit the sleep time for a single rate limit.
-- Total Sleep Limit: limit the accumulated sleep time for all rate limits.
-  
-The RoundTripper accepts a set of optional callbacks:
-- On Limit Detected: callback for when a rate limit that requires sleeping is detected.
-- On Single Limit Exceeded: callback for when a rate limit that exceeds the single sleep limit is detected.
-- On Total Limit Exceeded: callback for when a rate limit that exceeds the total sleep limit is detected.
 
-note: to detect secondary rate limits and take a custom action without sleeping, use SingleSleepLimit=0 and OnSingleLimitExceeded().
+The RoundTripper accepts a set of options to configure its behavior and set callbacks. nil callbacks are treated as no-op.  
+The options are:
+
+- `WithLimitDetectedCallback(callback)`: the callback is triggered before a sleep.
+- `WithSingleSleepLimit(duration, callback)`: limit the sleep duration for a single secondary rate limit & trigger a callback when the limit is exceeded.
+- `WithTotalSleepLimit`: limit the accumulated sleep duration for all secondary rate limits & trigger a callback when the limit is exceeded.
+  
+_Note_: to detect secondary rate limits without sleeping, use `WithSingleSleepLimit(0, your_callback_or_nil)`.
 
 ## Per-Request Options
-Use WithOverrideConfig() to override the configuration for a specific request using a context.
-Per-request overrides may be useful for special-cases of user requests,
+
+Use `WithOverrideConfig(opts...)` to override the configuration for a specific request (using the request context).
+Per-request overrides may be useful for special cases of user requests,
 as well as fine-grained policy control (e.g., for a sophisticated pagination mechanism).
 
 ## License
+
 This package is distributed under the MIT license found in the LICENSE file.  
 Contribution and feedback is welcome.
