@@ -1,4 +1,4 @@
-package github_ratelimit
+package github_secondary_ratelimit
 
 import (
 	"net/http"
@@ -8,8 +8,8 @@ import (
 // CallbackContext is passed to all callbacks.
 // Fields might be nillable, depending on the specific callback and field.
 type CallbackContext struct {
-	RoundTripper   *SecondaryRateLimitWaiter
-	SleepUntil     *time.Time
+	RoundTripper   *SecondaryRateLimiter
+	SleepUntil     *time.Time // TODO rename to ResetTime to match primary
 	TotalSleepTime *time.Duration
 	Request        *http.Request
 	Response       *http.Response

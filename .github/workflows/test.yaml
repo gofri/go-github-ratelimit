@@ -8,16 +8,19 @@ on:
   pull_request:
     branches:
       - main
+  schedule:
+    - cron: '0 0 * * 0'  # Runs at 00:00 UTC every Sunday
 
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
     env:
-      TEST_DIR: github_ratelimit/github_ratelimit_test
+      TEST_DIR: github_ratelimit/e2e_test
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/setup-go@c4a742cab115ed795e34d4513e2cf7d472deb55f # v3
         with:
-          go-version: 1.19
+          go-version: 1.23.1
       - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3
       - name: Verify dependencies
         run: go mod verify
@@ -25,7 +28,9 @@ jobs:
         run: go build -v ./...
       - name: Vet
         run: go vet -v ./...
-      - name: Vet-Test
+      - name: Test
+        run: go test -v -count=1 -shuffle=on -timeout=30m -race ./...
+      - name: E2E-Vet
         run: cd "$TEST_DIR" && go vet -v ./...
       - name: Test
         run: cd "$TEST_DIR" && go test -v -count=1 -shuffle=on -timeout=30m -race ./...
