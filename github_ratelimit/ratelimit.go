@@ -1,6 +1,7 @@
 package github_ratelimit
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"sync"
@@ -48,7 +49,7 @@ func NewRateLimitWaiterClient(base http.RoundTripper, opts ...Option) (*http.Cli
 // after a retry-after response is received and before it is processed,
 // a few other (concurrent) requests may be issued.
 func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Response, error) {
-	t.waitForRateLimit()
+	t.waitForRateLimit(request.Context())
 
 	resp, err := t.Base.RoundTrip(request)
 	if err != nil {
@@ -85,12 +86,12 @@ func (t *SecondaryRateLimitWaiter) getRequestConfig(request *http.Request) *Seco
 }
 
 // waitForRateLimit waits for the cooldown time to finish if a secondary rate limit is active.
-func (t *SecondaryRateLimitWaiter) waitForRateLimit() {
+func (t *SecondaryRateLimitWaiter) waitForRateLimit(ctx context.Context) {
 	t.lock.RLock()
 	sleepDuration := t.currentSleepDurationUnlocked()
 	t.lock.RUnlock()
 
-	time.Sleep(sleepDuration)
+	sleepWithContext(ctx, sleepDuration)
 }
 
 // updateRateLimit updates the active rate limit and triggers user callbacks if needed.
