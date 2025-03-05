@@ -9,7 +9,7 @@ import (
 // Fields might be nillable, depending on the specific callback and field.
 type CallbackContext struct {
 	RoundTripper   *SecondaryRateLimiter
-	SleepUntil     *time.Time // TODO rename to ResetTime to match primary
+	ResetTime      *time.Time
 	TotalSleepTime *time.Duration
 	Request        *http.Request
 	Response       *http.Response

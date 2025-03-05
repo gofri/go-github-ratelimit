@@ -145,7 +145,7 @@ func (t *SecondaryRateLimiter) triggerCallback(callback func(*CallbackContext), 
 	}
 
 	callbackContext.RoundTripper = t
-	callbackContext.SleepUntil = &newSleepUntil
+	callbackContext.ResetTime = &newSleepUntil
 	callbackContext.TotalSleepTime = &t.totalSleepTime
 
 	callback(callbackContext)
