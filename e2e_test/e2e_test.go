@@ -46,7 +46,7 @@ func TestGoGithubClientCompatability(t *testing.T) {
 
 	print := func(context *github_secondary_ratelimit.CallbackContext) {
 		t.Logf("Secondary rate limit reached! Sleeping for %.2f seconds [%v --> %v]",
-			time.Until(*context.SleepUntil).Seconds(), time.Now(), *context.SleepUntil)
+			time.Until(*context.ResetTime).Seconds(), time.Now(), *context.ResetTime)
 	}
 
 	orgLister := &orgLister{}

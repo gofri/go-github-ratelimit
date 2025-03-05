@@ -21,7 +21,7 @@ func TestSecondaryRateLimit(t *testing.T) {
 
 	print := func(context *github_secondary_ratelimit.CallbackContext) {
 		t.Logf("Secondary rate limit reached! Sleeping for %.2f seconds [%v --> %v]",
-			time.Until(*context.SleepUntil).Seconds(), time.Now(), *context.SleepUntil)
+			time.Until(*context.ResetTime).Seconds(), time.Now(), *context.ResetTime)
 	}
 
 	i := github_ratelimit_test.SetupSecondaryInjecter(t, every, sleep)
@@ -348,7 +348,7 @@ func TestCallbackContext(t *testing.T) {
 		if ctx.Request == nil || ctx.Response == nil {
 			t.Fatalf("missing request / response: %v / %v:", ctx.Request, ctx.Response)
 		}
-		if got, min, max := time.Until(*ctx.SleepUntil), time.Duration(0), sleep*time.Duration(requestNum.Load()); got <= min || got > max {
+		if got, min, max := time.Until(*ctx.ResetTime), time.Duration(0), sleep*time.Duration(requestNum.Load()); got <= min || got > max {
 			t.Fatalf("unexpected sleep until time: %v < %v <= %v", min, got, max)
 		}
 		if got, want := *ctx.TotalSleepTime, sleep*time.Duration(requestsCycle); got != want {

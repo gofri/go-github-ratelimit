@@ -13,10 +13,6 @@ It is meant to complement [go-github](https://github.com/google/go-github), but 
 
 If you like this package, please check out [go-github-pagination!](https://github.com/gofri/go-github-pagination)
 
-### Migration from V1 to V2
-
-TODO
-
 ## Recommended: Pagination Handling
 
 If you like this package, please checkout [go-github-pagination](https://github.com/gofri/go-github-pagination).  
@@ -51,7 +47,8 @@ func main() {
 
 ## Client Options
 
-Both RoundTrippers support a set of options to configure their behavior and set callbacks. nil callbacks are treated as no-op.  
+Both RoundTrippers support a set of options to configure their behavior and set callbacks.  
+nil callbacks are treated as no-op.  
 
 ### Primary Rate Limit Options:
 
