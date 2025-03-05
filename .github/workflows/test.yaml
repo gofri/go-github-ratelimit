@@ -15,7 +15,7 @@ jobs:
   build_and_test:
     runs-on: ubuntu-latest
     env:
-      TEST_DIR: github_ratelimit/e2e_test
+      TEST_DIR: e2e_test
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/setup-go@c4a742cab115ed795e34d4513e2cf7d472deb55f # v3
