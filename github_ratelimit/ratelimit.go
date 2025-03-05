@@ -91,7 +91,8 @@ func (t *SecondaryRateLimitWaiter) waitForRateLimit(ctx context.Context) {
 	sleepDuration := t.currentSleepDurationUnlocked()
 	t.lock.RUnlock()
 
-	sleepWithContext(ctx, sleepDuration)
+	// ignore "cancelled" error because it is expected
+	_ = sleepWithContext(ctx, sleepDuration)
 }
 
 // updateRateLimit updates the active rate limit and triggers user callbacks if needed.
