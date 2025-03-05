@@ -1,43 +1,35 @@
-package github_ratelimit
+package github_secondary_ratelimit
 
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 )
 
-type SecondaryRateLimitWaiter struct {
+// SecondaryRateLimiter is a RoundTripper for handling GitHub secondary rate limits.
+type SecondaryRateLimiter struct {
 	Base           http.RoundTripper
 	sleepUntil     *time.Time
 	lock           sync.RWMutex
 	totalSleepTime time.Duration
-	config         *SecondaryRateLimitConfig
+	config         *Config
 }
 
-func NewRateLimitWaiter(base http.RoundTripper, opts ...Option) (*SecondaryRateLimitWaiter, error) {
+// New creates a new SecondaryRateLimiter with the given base RoundTripper and options.
+// see optins.go for available options.
+// see RoundTrip() for the actual rate limit handling.
+func New(base http.RoundTripper, opts ...Option) *SecondaryRateLimiter {
 	if base == nil {
 		base = http.DefaultTransport
 	}
 
-	waiter := SecondaryRateLimitWaiter{
+	waiter := SecondaryRateLimiter{
 		Base:   base,
 		config: newConfig(opts...),
 	}
 
-	return &waiter, nil
-}
-
-func NewRateLimitWaiterClient(base http.RoundTripper, opts ...Option) (*http.Client, error) {
-	waiter, err := NewRateLimitWaiter(base, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return &http.Client{
-		Transport: waiter,
-	}, nil
+	return &waiter
 }
 
 // RoundTrip handles the secondary rate limit by waiting for it to finish before issuing new requests.
@@ -48,7 +40,7 @@ func NewRateLimitWaiterClient(base http.RoundTripper, opts ...Option) (*http.Cli
 // so we prefer to let some slip in case of a race condition, i.e.,
 // after a retry-after response is received and before it is processed,
 // a few other (concurrent) requests may be issued.
-func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Response, error) {
+func (t *SecondaryRateLimiter) RoundTrip(request *http.Request) (*http.Response, error) {
 	t.waitForRateLimit(request.Context())
 
 	resp, err := t.Base.RoundTrip(request)
@@ -74,7 +66,7 @@ func (t *SecondaryRateLimitWaiter) RoundTrip(request *http.Request) (*http.Respo
 	return t.RoundTrip(request)
 }
 
-func (t *SecondaryRateLimitWaiter) getRequestConfig(request *http.Request) *SecondaryRateLimitConfig {
+func (t *SecondaryRateLimiter) getRequestConfig(request *http.Request) *Config {
 	overrides := GetConfigOverrides(request.Context())
 	if overrides == nil {
 		// no config override - use the default config (zero-copy)
@@ -86,12 +78,11 @@ func (t *SecondaryRateLimitWaiter) getRequestConfig(request *http.Request) *Seco
 }
 
 // waitForRateLimit waits for the cooldown time to finish if a secondary rate limit is active.
-func (t *SecondaryRateLimitWaiter) waitForRateLimit(ctx context.Context) {
+func (t *SecondaryRateLimiter) waitForRateLimit(ctx context.Context) {
 	t.lock.RLock()
 	sleepDuration := t.currentSleepDurationUnlocked()
 	t.lock.RUnlock()
 
-	// ignore "cancelled" error because it is expected
 	_ = sleepWithContext(ctx, sleepDuration)
 }
 
@@ -99,7 +90,7 @@ func (t *SecondaryRateLimitWaiter) waitForRateLimit(ctx context.Context) {
 // the rate limit is not updated if there is already an active rate limit.
 // it never waits because the retry handles sleeping anyway.
 // returns whether or not to retry the request.
-func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, callbackContext *CallbackContext) (needRetry bool) {
+func (t *SecondaryRateLimiter) updateRateLimit(secondaryLimit time.Time, callbackContext *CallbackContext) (needRetry bool) {
 	// quick check without the lock: maybe the secondary limit just passed
 	if time.Now().After(secondaryLimit) {
 		return true
@@ -141,14 +132,14 @@ func (t *SecondaryRateLimitWaiter) updateRateLimit(secondaryLimit time.Time, cal
 	return true
 }
 
-func (t *SecondaryRateLimitWaiter) currentSleepDurationUnlocked() time.Duration {
+func (t *SecondaryRateLimiter) currentSleepDurationUnlocked() time.Duration {
 	if t.sleepUntil == nil {
 		return 0
 	}
 	return time.Until(*t.sleepUntil)
 }
 
-func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newSleepUntil time.Time) {
+func (t *SecondaryRateLimiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newSleepUntil time.Time) {
 	if callback == nil {
 		return
 	}
@@ -158,70 +149,6 @@ func (t *SecondaryRateLimitWaiter) triggerCallback(callback func(*CallbackContex
 	callbackContext.TotalSleepTime = &t.totalSleepTime
 
 	callback(callbackContext)
-}
-
-// parseSecondaryLimitTime parses the GitHub API response header,
-// looking for the secondary rate limit as defined by GitHub API documentation.
-// https://docs.github.com/en/rest/overview/resources-in-the-rest-api#secondary-rate-limits
-func parseSecondaryLimitTime(resp *http.Response) *time.Time {
-	if !isSecondaryRateLimit(resp) {
-		return nil
-	}
-
-	if sleepUntil := parseRetryAfter(resp.Header); sleepUntil != nil {
-		return sleepUntil
-	}
-
-	if sleepUntil := parseXRateLimitReset(resp); sleepUntil != nil {
-		return sleepUntil
-	}
-
-	// XXX: per GitHub API docs, we should default to a 60 seconds sleep duration in case the header is missing,
-	//		with an exponential backoff mechanism.
-	//		we may want to implement this in the future (with configurable limits),
-	//		but let's avoid it while there are no known cases of missing headers.
-	return nil
-}
-
-// parseRetryAfter parses the GitHub API response header in case a Retry-After is returned.
-func parseRetryAfter(header http.Header) *time.Time {
-	retryAfterSeconds, ok := httpHeaderIntValue(header, "retry-after")
-	if !ok || retryAfterSeconds <= 0 {
-		return nil
-	}
-
-	// per GitHub API, the header is set to the number of seconds to wait
-	sleepUntil := time.Now().Add(time.Duration(retryAfterSeconds) * time.Second)
-
-	return &sleepUntil
-}
-
-// parseXRateLimitReset parses the GitHub API response header in case a x-ratelimit-reset is returned.
-// to avoid handling primary rate limits (which are categorized),
-// we only handle x-ratelimit-reset in case the primary rate limit is not reached.
-func parseXRateLimitReset(resp *http.Response) *time.Time {
-	secondsSinceEpoch, ok := httpHeaderIntValue(resp.Header, HeaderXRateLimitReset)
-	if !ok || secondsSinceEpoch <= 0 {
-		return nil
-	}
-
-	// per GitHub API, the header is set to the number of seconds since epoch (UTC)
-	sleepUntil := time.Unix(secondsSinceEpoch, 0)
-
-	return &sleepUntil
-}
-
-// httpHeaderIntValue parses an integer value from the given HTTP header.
-func httpHeaderIntValue(header http.Header, key string) (int64, bool) {
-	val := header.Get(key)
-	if val == "" {
-		return 0, false
-	}
-	asInt, err := strconv.ParseInt(val, 10, 64)
-	if err != nil {
-		return 0, false
-	}
-	return asInt, true
 }
 
 // smoothSleepTime rounds up the sleep duration to whole seconds.
