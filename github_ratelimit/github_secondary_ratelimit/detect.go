@@ -96,12 +96,12 @@ func parseSecondaryLimitTime(resp *http.Response) *time.Time {
 		return nil
 	}
 
-	if sleepUntil := parseRetryAfter(resp.Header); sleepUntil != nil {
-		return sleepUntil
+	if resetTime := parseRetryAfter(resp.Header); resetTime != nil {
+		return resetTime
 	}
 
-	if sleepUntil := parseXRateLimitReset(resp); sleepUntil != nil {
-		return sleepUntil
+	if resetTime := parseXRateLimitReset(resp); resetTime != nil {
+		return resetTime
 	}
 
 	// XXX: per GitHub API docs, we should default to a 60 seconds sleep duration in case the header is missing,
@@ -119,9 +119,9 @@ func parseRetryAfter(header http.Header) *time.Time {
 	}
 
 	// per GitHub API, the header is set to the number of seconds to wait
-	sleepUntil := time.Now().Add(time.Duration(retryAfterSeconds) * time.Second)
+	resetTime := time.Now().Add(time.Duration(retryAfterSeconds) * time.Second)
 
-	return &sleepUntil
+	return &resetTime
 }
 
 // parseXRateLimitReset parses the GitHub API response header in case a x-ratelimit-reset is returned.
@@ -134,9 +134,9 @@ func parseXRateLimitReset(resp *http.Response) *time.Time {
 	}
 
 	// per GitHub API, the header is set to the number of seconds since epoch (UTC)
-	sleepUntil := time.Unix(secondsSinceEpoch, 0)
+	resetTime := time.Unix(secondsSinceEpoch, 0)
 
-	return &sleepUntil
+	return &resetTime
 }
 
 // httpHeaderIntValue parses an integer value from the given HTTP header.

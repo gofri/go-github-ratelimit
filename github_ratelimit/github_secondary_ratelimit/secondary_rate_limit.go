@@ -10,7 +10,7 @@ import (
 // SecondaryRateLimiter is a RoundTripper for handling GitHub secondary rate limits.
 type SecondaryRateLimiter struct {
 	Base           http.RoundTripper
-	sleepUntil     *time.Time
+	resetTime      *time.Time
 	lock           sync.RWMutex
 	totalSleepTime time.Duration
 	config         *Config
@@ -125,7 +125,7 @@ func (t *SecondaryRateLimiter) updateRateLimit(secondaryLimit time.Time, callbac
 	}
 
 	// a legitimate new limit
-	t.sleepUntil = &secondaryLimit
+	t.resetTime = &secondaryLimit
 	t.totalSleepTime += smoothSleepTime(sleepDuration)
 	t.triggerCallback(config.onLimitDetected, callbackContext, secondaryLimit)
 
@@ -133,10 +133,10 @@ func (t *SecondaryRateLimiter) updateRateLimit(secondaryLimit time.Time, callbac
 }
 
 func (t *SecondaryRateLimiter) currentSleepDurationUnlocked() time.Duration {
-	if t.sleepUntil == nil {
+	if t.resetTime == nil {
 		return 0
 	}
-	return time.Until(*t.sleepUntil)
+	return time.Until(*t.resetTime)
 }
 
 func (t *SecondaryRateLimiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newSleepUntil time.Time) {
