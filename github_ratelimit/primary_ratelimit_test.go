@@ -124,8 +124,6 @@ func TestPrimaryCallbacks(t *testing.T) {
 	)
 
 	t.Run("limit and prevention", func(t *testing.T) {
-		every := 1 * time.Second
-
 		limitChan := make(chan error, 1)
 		limitCB := func(ctx *github_primary_ratelimit.CallbackContext) {
 			defer close(limitChan)
@@ -179,7 +177,7 @@ func TestPrimaryCallbacks(t *testing.T) {
 			resetChan <- nil
 		}
 
-		every = 500 * time.Millisecond
+		every := 500 * time.Millisecond
 		i := github_ratelimit_test.SetupPrimaryInjecter(t, every, sleep, validCategory)
 		c := github_ratelimit_test.NewPrimaryClient(i,
 			github_primary_ratelimit.WithLimitDetectedCallback(limitCB),
