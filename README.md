@@ -2,33 +2,31 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/gofri/go-github-ratelimit)](https://goreportcard.com/report/github.com/gofri/go-github-ratelimit)
 
-Package `go-github-ratelimit` provides http.RoundTripper implementation that handles both [primary rate limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?#about-primary-rate-limits) and [secondary rate limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?#about-secondary-rate-limits) for the GitHub API.
+Package `go-github-ratelimit` providesa middleware (http.RoundTripper) that handles both [Primary Rate Limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?#about-primary-rate-limits) and [Secondary Rate Limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?#about-secondary-rate-limits) for the GitHub API.
 
-Primary rate limits are handled by returning a detailed error.  
-Secondary rate limits are handled by waiting in blocking mode (sleep) and then issuing/retrying requests.  
-There is support for callbacks to be triggered when rate limits are detected/exceeded/etc. - see below.  
+* Primary rate limits are handled by returning a detailed error.  
+* Secondary rate limits are handled by waiting in blocking mode (sleep) and then issuing/retrying requests.  
+* There is support for callbacks to be triggered when rate limits are detected/exceeded/etc. - see below.  
 
-`go-github-ratelimit` can be used with any HTTP client communicating with GitHub API.  
-It is meant to complement [go-github](https://github.com/google/go-github), but there is no association between this repository and the go-github repository nor Google.  
-
-If you like this package, please check out [go-github-pagination!](https://github.com/gofri/go-github-pagination)
+The module can be used with any HTTP client communicating with GitHub API. It is designed to have low overhead during good path.    
+It is meant to complement [go-github](https://github.com/google/go-github), but there is no association between this repository and the go-github repository nor Google.
 
 ## Recommended: Pagination Handling
 
-If you like this package, please checkout [go-github-pagination](https://github.com/gofri/go-github-pagination).  
+If you like this package, please check out [go-github-pagination](https://github.com/gofri/go-github-pagination).  
 It supports pagination out of the box, and plays well with the rate limit round-tripper.  
 It is best to stack the pagination round-tripper on top of the rate limit round-tripper.  
 
 
 ## Installation
 
-```go get github.com/gofri/go-github-ratelimit```
+```go get github.com/gofri/go-github-ratelimit/v2```
 
 ## Usage Example (with [go-github](https://github.com/google/go-github))
 
 ```go
 import "github.com/google/go-github/v68/github"
-import "github.com/gofri/go-github-ratelimit/github_ratelimit"
+import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
 
 func main() {
   // use the plain ratelimiter, without options / callbacks / underlying http.RoundTripper.
@@ -76,7 +74,7 @@ as well as fine-grained policy control (e.g., for a sophisticated pagination mec
 
 ```go
 import "github.com/google/go-github/v68/github"
-import "github.com/gofri/go-github-ratelimit/github_ratelimit"
+import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
 import "github.com/gofri/go-github-pagination/githubpagination"
 
 func main() {
