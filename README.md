@@ -25,7 +25,7 @@ It is best to stack the pagination round-tripper on top of the rate limit round-
 ## Usage Example (with [go-github](https://github.com/google/go-github))
 
 ```go
-import "github.com/google/go-github/v68/github"
+import "github.com/google/go-github/v69/github"
 import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
 
 func main() {
@@ -73,31 +73,41 @@ as well as fine-grained policy control (e.g., for a sophisticated pagination mec
 ## Advanced Example
 
 ```go
-import "github.com/google/go-github/v68/github"
+import "github.com/google/go-github/v69/github"
 import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
+import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_primary_ratelimit"
+import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_secondary_ratelimit"
 import "github.com/gofri/go-github-pagination/githubpagination"
 
 func main() {
-  // Set up the rate limiter with some options.
-  rateLimiter, err := github_ratelimit.New(nil,
-    github_ratelimit.WithLimitDetectedCallback(func(category string, limit int, remaining int, reset int) {
-      fmt.Printf("Primary rate limit detected: %s, %d/%d, reset in %d seconds\n", category, remaining, limit, reset)
-    }),
-    github_ratelimit.WithRequestPreventedCallback(func(category string, limit int, remaining int, reset int) {
-      fmt.Printf("Request prevented due to primary rate limit: %s, %d/%d, reset in %d seconds\n", category, remaining, limit, reset)
-    }),
-  )
-  if err != nil {
-    panic(err)
-  }
+	var username string
+	fmt.Print("Enter GitHub username: ")
+	fmt.Scanf("%s", &username)
 
-  paginator := githubpagination.NewClient(nil,
-    githubpagination.WithPerPage(100), // default to 100 results per page
-  )
+	rateLimiter := github_ratelimit.New(nil,
+		github_primary_ratelimit.WithLimitDetectedCallback(func(ctx *github_primary_ratelimit.CallbackContext) {
+			fmt.Printf("Primary rate limit detected: category %s, reset time: %v\n", ctx.Category, ctx.ResetTime)
+		}),
+		github_secondary_ratelimit.WithLimitDetectedCallback(func(ctx *github_secondary_ratelimit.CallbackContext) {
+			fmt.Printf("Secondary rate limit detected: reset time: %v, total sleep time: %v\n", ctx.ResetTime, ctx.TotalSleepTime)
+		}),
+	)
 
-  client := github.NewClient(rateLimiter).WithAuthToken("your personal access token")
+	paginator := githubpagination.NewClient(rateLimiter,
+		githubpagination.WithPerPage(100), // default to 100 results per page
+	)
+	client := github.NewClient(paginator)
 
-  // now use the client as you please
+	// arbitrary usage of the client
+	repos, _, err := client.Repositories.ListByUser(context.Background(), username, nil)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	for i, repo := range repos {
+		fmt.Printf("%v. %v\n", i+1, repo.GetName())
+	}
 }
 ```
 
