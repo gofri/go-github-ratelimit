@@ -139,13 +139,13 @@ func (t *SecondaryRateLimiter) currentSleepDurationUnlocked() time.Duration {
 	return time.Until(*t.resetTime)
 }
 
-func (t *SecondaryRateLimiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newSleepUntil time.Time) {
+func (t *SecondaryRateLimiter) triggerCallback(callback func(*CallbackContext), callbackContext *CallbackContext, newResetTime time.Time) {
 	if callback == nil {
 		return
 	}
 
 	callbackContext.RoundTripper = t
-	callbackContext.ResetTime = &newSleepUntil
+	callbackContext.ResetTime = &newResetTime
 	callbackContext.TotalSleepTime = &t.totalSleepTime
 
 	callback(callbackContext)

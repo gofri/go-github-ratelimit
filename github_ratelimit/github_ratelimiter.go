@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gofri/go-github-ratelimit/github_ratelimit/github_primary_ratelimit"
-	"github.com/gofri/go-github-ratelimit/github_ratelimit/github_secondary_ratelimit"
+	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_primary_ratelimit"
+	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_secondary_ratelimit"
 )
 
 type PrimaryRateLimiter = github_primary_ratelimit.PrimaryRateLimiter

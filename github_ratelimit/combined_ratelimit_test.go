@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofri/go-github-ratelimit/github_ratelimit/github_primary_ratelimit"
-	"github.com/gofri/go-github-ratelimit/github_ratelimit/github_ratelimit_test"
-	"github.com/gofri/go-github-ratelimit/github_ratelimit/github_secondary_ratelimit"
+	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_primary_ratelimit"
+	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_ratelimit_test"
+	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_secondary_ratelimit"
 )
 
 func TestCombinedRateLimiter(t *testing.T) {
