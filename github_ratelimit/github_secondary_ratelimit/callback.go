@@ -15,8 +15,8 @@ type CallbackContext struct {
 	Response       *http.Response
 }
 
-// OnLimitDetected is a callback to be called when a new rate limit is detected (before the sleep)
-// The totalSleepTime includes the sleep duration for the upcoming sleep
+// OnLimitDetected is a callback to be called when a new rate limit is detected (before the sleep).
+// The totalSleepTime includes the sleep duration for the upcoming sleep.
 // Note: called while holding the lock.
 type OnLimitDetected func(*CallbackContext)
 
