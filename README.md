@@ -24,8 +24,8 @@ It is best to stack the pagination round-tripper on top of the rate limit round-
 
 ## Usage Example (with [go-github](https://github.com/google/go-github))
 
+see [example/basic.go](example/basic.go) for a runnable example.
 ```go
-// see example/basic.go for a runnable example.
 rateLimiter := github_ratelimit.NewClient(nil)
 client := github.NewClient(rateLimiter) // .WithAuthToken("your personal access token")
 
@@ -47,7 +47,7 @@ for _, tag := range tags {
 Both RoundTrippers support a set of options to configure their behavior and set callbacks.  
 nil callbacks are treated as no-op.  
 
-### Primary Rate Limit Options:
+### Primary Rate Limit Options (see [options.go](github_ratelimit/github_primary_ratelimit/options.go)):
 
 - `WithLimitDetectedCallback(callback)`: the callback is triggered when any primary rate limit is detected.
 - `WithRequestPreventedCallback(callback)`: the callback is triggered when a request is prevented due to an active rate limit.
@@ -56,7 +56,7 @@ nil callbacks are treated as no-op.
 - `WithSharedState(state)`: share state between multiple clients (e.g., for a single user running concurrently).
 - `WithBypassLimit()`: bypass the rate limit mechanism, i.e., do not prevent requests when a rate limit is active.
 
-### Secondary Rate Limit Options:
+### Secondary Rate Limit Options (see [options.go](github_ratelimit/github_secondary_ratelimit/options.go)):
 
 - `WithLimitDetectedCallback(callback)`: the callback is triggered before a sleep.
 - `WithSingleSleepLimit(duration, callback)`: limit the sleep duration for a single secondary rate limit & trigger a callback when the limit is exceeded.
@@ -71,8 +71,8 @@ as well as fine-grained policy control (e.g., for a sophisticated pagination mec
 
 ## Advanced Example
 
+See [example/advanced.go](example/advanced.go) for a runnable example.
 ```go
-// see example/advanced.go for a runnable example.
 	rateLimiter := github_ratelimit.New(nil,
 		github_primary_ratelimit.WithLimitDetectedCallback(func(ctx *github_primary_ratelimit.CallbackContext) {
 			fmt.Printf("Primary rate limit detected: category %s, reset time: %v\n", ctx.Category, ctx.ResetTime)
