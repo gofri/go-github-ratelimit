@@ -2,7 +2,7 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/gofri/go-github-ratelimit)](https://goreportcard.com/report/github.com/gofri/go-github-ratelimit)
 
-Package `go-github-ratelimit` providesa middleware (http.RoundTripper) that handles both [Primary Rate Limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?#about-primary-rate-limits) and [Secondary Rate Limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?#about-secondary-rate-limits) for the GitHub API.
+Package `go-github-ratelimit` provides a middleware (http.RoundTripper) that handles both [Primary Rate Limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?#about-primary-rate-limits) and [Secondary Rate Limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?#about-secondary-rate-limits) for the GitHub API.
 
 * Primary rate limits are handled by returning a detailed error.  
 * Secondary rate limits are handled by waiting in blocking mode (sleep) and then issuing/retrying requests.  
