@@ -25,21 +25,20 @@ It is best to stack the pagination round-tripper on top of the rate limit round-
 ## Usage Example (with [go-github](https://github.com/google/go-github))
 
 ```go
-import "github.com/google/go-github/v69/github"
-import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
+// see example/basic.go for a runnable example.
+rateLimiter := github_ratelimit.NewClient(nil)
+client := github.NewClient(rateLimiter) // .WithAuthToken("your personal access token")
 
-func main() {
-  // use the plain ratelimiter, without options / callbacks / underlying http.RoundTripper.
-  rateLimiter, err := github_ratelimit.New(nil)
-  if err != nil {
-    panic(err)
-  }
-  client := github.NewClient(rateLimiter).WithAuthToken("your personal access token")
+// disable go-github's built-in rate limiting
+ctx := context.WithValue(context.Background(), github.BypassRateLimitCheck, true)
 
-  // disable go-github's built-in rate limiting
-  ctx := context.WithValue(context.Background(), github.BypassRateLimitCheck)
+tags, _, err := client.Repositories.ListTags(ctx, "gofri", "go-github-ratelimit", nil)
+if err != nil {
+  panic(err)
+}
 
-  // now use the client as you please
+for _, tag := range tags {
+  fmt.Printf("- %v\n", *tag.Name)
 }
 ```
 
@@ -73,17 +72,7 @@ as well as fine-grained policy control (e.g., for a sophisticated pagination mec
 ## Advanced Example
 
 ```go
-import "github.com/google/go-github/v69/github"
-import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit"
-import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_primary_ratelimit"
-import "github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_secondary_ratelimit"
-import "github.com/gofri/go-github-pagination/githubpagination"
-
-func main() {
-	var username string
-	fmt.Print("Enter GitHub username: ")
-	fmt.Scanf("%s", &username)
-
+// see example/advanced.go for a runnable example.
 	rateLimiter := github_ratelimit.New(nil,
 		github_primary_ratelimit.WithLimitDetectedCallback(func(ctx *github_primary_ratelimit.CallbackContext) {
 			fmt.Printf("Primary rate limit detected: category %s, reset time: %v\n", ctx.Category, ctx.ResetTime)
@@ -96,19 +85,20 @@ func main() {
 	paginator := githubpagination.NewClient(rateLimiter,
 		githubpagination.WithPerPage(100), // default to 100 results per page
 	)
-	client := github.NewClient(paginator)
+	client := github.NewClient(paginator) // .WithAuthToken("your personal access token")
 
-	// arbitrary usage of the client
-	repos, _, err := client.Repositories.ListByUser(context.Background(), username, nil)
+	// disable go-github's built-in rate limiting
+	ctx := context.WithValue(context.Background(), github.BypassRateLimitCheck, true)
+
+	// list repository tags
+	tags, _, err := client.Repositories.ListTags(ctx, "gofri", "go-github-ratelimit", nil)
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
+		panic(err)
 	}
 
-	for i, repo := range repos {
-		fmt.Printf("%v. %v\n", i+1, repo.GetName())
+	for _, tag := range tags {
+		fmt.Printf("- %v\n", *tag.Name)
 	}
-}
 ```
 
 ## Migration (V1 => V2)
