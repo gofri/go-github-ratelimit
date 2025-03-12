@@ -29,12 +29,20 @@ func NewSecondaryLimiter(base http.RoundTripper, opts ...SecondaryRateLimiterOpt
 
 // New creates a combined limiter by stacking a SecondaryRateLimiter on top of a PrimaryRateLimiterOption.
 // It accepts options of both types and creates the RoundTrippers.
+// Check out options.go @ github_primary_ratelimit / github_secondary_ratelimit for available options.
 func New(base http.RoundTripper, opts ...any) http.RoundTripper {
 	primaryOpts, secondaryOpts := gatherOptions(opts...)
 	primary := NewPrimaryLimiter(base, primaryOpts...)
 	secondary := NewSecondaryLimiter(primary, secondaryOpts...)
 
 	return secondary
+}
+
+// NewClient creates a new HTTP client with the combined rate limiter.
+func NewClient(base http.RoundTripper, opts ...any) *http.Client {
+	return &http.Client{
+		Transport: New(base, opts...),
+	}
 }
 
 // WithOverrideConfig adds config overrides to the context.
