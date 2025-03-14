@@ -1,0 +1,27 @@
+name: Auto Comment on PRs and Issues
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  auto-comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue_number = context.payload.issue ? context.payload.issue.number : context.payload.pull_request.number;
+            const repo = context.repo;
+            const message = `I am maintaining this repository as a side thing, so my availability varies with time.\n\nNo coffee expected, but please leave a star if you find this repository useful :)\n\nPlease feel free to ping this issue/PR if I don't respond for a while.`;
+            
+            github.rest.issues.createComment({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: issue_number,
+              body: message
+            });
