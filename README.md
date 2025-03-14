@@ -117,7 +117,7 @@ I'd be glad to help and add documetation per need.
 This package is distributed under the MIT license found in the LICENSE file.  
 
 ## Contribution
-Contribution and feedback is welcome.
+Contribution and feedback is welcome.  
 I'm trying to drink less coffee so don't buy me one, but please do star this repository if you find it useful.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=gofri/go-github-ratelimit&type=Date)](https://www.star-history.com/#gofri/go-github-ratelimit&Date)
