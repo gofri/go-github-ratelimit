@@ -21,10 +21,9 @@ jobs:
           script: |
             const issue_number = context.payload.issue ? context.payload.issue.number : context.payload.pull_request.number;
             const repo = context.repo;
-            const message = `I am maintaining this repository as a side thing, so my availability varies with time.
-
-            No coffee expected, but please leave a star if you find this repository useful :)
-
+            const message = `Thank you for your contribution!
+            I am maintaining this repository as a side thing, so my availability varies with time.
+            No coffee is expected, but please leave a star if you find this repository useful :)
             Please feel free to ping this issue/PR if I don't respond for a while.`;
 
             github.rest.issues.createComment({
