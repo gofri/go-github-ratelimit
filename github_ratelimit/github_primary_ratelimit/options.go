@@ -63,3 +63,15 @@ func WithSleepUntilReset() Option {
 		time.Sleep(time.Until(*ctx.ResetTime))
 	})
 }
+
+// Same as WithSleepUntilReset() but with additional safety margin to account
+// for clock skew
+//
+// This variant is recommended to avoid running into the rate limit just before
+// it expires. Call it with a small skew value like 5 * time.Second
+// to account for clock skew between github and the local system.
+func WithSleepUntilResetSkew(skew time.Duration) Option {
+	return WithLimitDetectedCallback(func(ctx *CallbackContext) {
+		time.Sleep(time.Until((*ctx.ResetTime).Add(skew)))
+	})
+}
