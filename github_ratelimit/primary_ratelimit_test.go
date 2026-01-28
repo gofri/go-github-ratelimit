@@ -320,3 +320,102 @@ func TestConfigOverride(t *testing.T) {
 		t.Fatal("default callback was called instead of override")
 	}
 }
+
+type ConfigurableMockRoundTripper struct {
+	resp *http.Response
+	err  error
+}
+
+func (m *ConfigurableMockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return m.resp, m.err
+}
+
+func TestPrimaryRateLimit_ResetOnSuccess(t *testing.T) {
+	mockTransport := &ConfigurableMockRoundTripper{}
+	limiter := github_primary_ratelimit.New(mockTransport)
+
+	// 1. Simulate Rate Limit
+	limitReset := time.Now().Add(1 * time.Hour)
+	limitResetEpoch := github_primary_ratelimit.SecondsSinceEpoch(limitReset.Unix())
+	targetCategory := "search"
+	targetCategoryResource := github_primary_ratelimit.ResourceCategorySearch
+
+	header := http.Header{}
+	header.Set("x-ratelimit-remaining", "0")
+	header.Set("x-ratelimit-reset", fmt.Sprintf("%d", int64(limitResetEpoch)))
+	header.Set("x-ratelimit-resource", targetCategory)
+
+	mockTransport.resp = &http.Response{
+		StatusCode: http.StatusForbidden,
+		Header:     header,
+	}
+
+	req, _ := http.NewRequest("GET", "https://api.github.com/search?q=ratelimit", nil)
+	_, err := limiter.RoundTrip(req)
+	if err == nil {
+		t.Fatal("expected error on first call (rate limit trigger)")
+	}
+
+	// 2. Verify Blocked
+	// Set 200 OK to ensure the error comes from the limiter state, not the backend
+	mockTransport.resp = &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+	}
+	req2, _ := http.NewRequest("GET", "https://api.github.com/search?q=ratelimit2", nil)
+	_, err = limiter.RoundTrip(req2)
+	if err == nil {
+		t.Fatal("expected error on second call (blocked)")
+	}
+	var rateLimitErr *github_primary_ratelimit.RateLimitReachedError
+	if !errors.As(err, &rateLimitErr) {
+		t.Fatalf("expected RateLimitReachedError, got %T: %v", err, err)
+	}
+	if rateLimitErr.Category != targetCategoryResource {
+		t.Fatalf("expected blocked category %v, got %v", targetCategoryResource, rateLimitErr.Category)
+	}
+
+	// 3. Probe with ResetOnSuccessfulCall
+	headerSuccess := http.Header{}
+	headerSuccess.Set("x-ratelimit-resource", targetCategory)
+	mockTransport.resp = &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     headerSuccess,
+	}
+
+	var unknownCategoryDetected atomic.Bool
+	callback := func(ctx *github_primary_ratelimit.CallbackContext) {
+		unknownCategoryDetected.Store(true)
+		t.Logf("Unknown Category Callback: %v", ctx.Category)
+	}
+
+	req3, _ := http.NewRequest("GET", "https://api.github.com/search?q=ratelimit3", nil)
+	ctx := github_primary_ratelimit.WithOverrideConfig(req3.Context(),
+		github_primary_ratelimit.WithBypassLimit(),
+		github_primary_ratelimit.WithResetOnSuccessfulCall(),
+		github_primary_ratelimit.WithUnknownCategoryCallback(callback),
+	)
+	req3 = req3.WithContext(ctx)
+
+	resp3, err := limiter.RoundTrip(req3)
+	if err != nil {
+		t.Fatalf("unexpected error on probe call: %v", err)
+	}
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK on probe call, got %v", resp3.StatusCode)
+	}
+
+	if unknownCategoryDetected.Load() {
+		t.Fatal("unknown category detected during probe, reset likely failed")
+	}
+
+	// 4. Verify Unblocked
+	req4, _ := http.NewRequest("GET", "https://api.github.com/search?q=ratelimit4", nil)
+	resp4, err := limiter.RoundTrip(req4)
+	if err != nil {
+		t.Fatalf("unexpected error on verification call (should be unblocked): %v", err)
+	}
+	if resp4.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK on verification call, got %v", resp4.StatusCode)
+	}
+}

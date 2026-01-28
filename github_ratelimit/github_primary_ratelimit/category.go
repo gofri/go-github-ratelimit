@@ -80,7 +80,8 @@ func GetAllCategories() []ResourceCategory {
 }
 
 func parseRequestCategory(request *http.Request) ResourceCategory {
-	return parseCategory(request.Method, request.URL.RawPath)
+	// RawPath is only populated when there is encoding in the path
+	return parseCategory(request.Method, request.URL.Path)
 }
 
 func parseCategory(method string, path string) ResourceCategory {

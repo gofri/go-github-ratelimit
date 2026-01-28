@@ -36,6 +36,15 @@ func WithUnknownCategoryCallback(callback OnUnknownCategory) Option {
 	}
 }
 
+// WithResetOnSuccessfulCall forces the reset of the current Category when a successful response is received.
+// Useful for probing with github_ratelimit.WithOverrideConfig for individual calls to reset an entire category.
+// Additionally useful if this rate limiter sits on top of a collection of tokens that can be rotated
+func WithResetOnSuccessfulCall() Option {
+	return func(c *Config) {
+		c.resetOnSuccess = true
+	}
+}
+
 // WithSharedState is used to set the rate limiter state from an external source.
 // Specifically, it is used to share the state between multiple rate limiters.
 // e.g.,

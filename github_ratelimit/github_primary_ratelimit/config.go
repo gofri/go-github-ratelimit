@@ -6,8 +6,9 @@ import "context"
 // It is used internally and generated from the options.
 // It holds the state of the rate limiter in order to enable state sharing.
 type Config struct {
-	state       *RateLimitState
-	bypassLimit bool
+	state          *RateLimitState
+	bypassLimit    bool
+	resetOnSuccess bool
 
 	// callbacks
 	onLimitReached     OnLimitReached

@@ -94,22 +94,18 @@ func (s *RateLimitState) Update(config *Config, update UpdateContainer, callback
 
 	newResetTime := update.GetResetTime()
 	if newResetTime == nil {
-		// nothing to update on a successful request
+		if config.resetOnSuccess {
+			// reset the category block with nil
+			s.storeNewResetTime(config, category, callbackContext, nil)
+		}
 		return nil
 	}
 	callbackContext.ResetTime = newResetTime.AsTime()
 
-	sharedResetTime, exists := s.resetTimeMap[category]
-	if !exists {
-		// XXX: there is no point in adding it as a new category to the map,
-		// 		because we will not detect it anyway. so just trigger and continue.
-		config.TriggerUnknownCategory(callbackContext)
+	sharedResetTime := s.storeNewResetTime(config, category, callbackContext, newResetTime)
+	if sharedResetTime == nil {
 		return nil
 	}
-
-	// XXX: should hold a ref to the timer to free resources early on-demand.
-	//      please open an issue if you actually need it.
-	sharedResetTime.Store(newResetTime)
 	timer := newResetTime.StartTimer()
 	go func(timer *time.Timer, callbackContext CallbackContext) {
 		<-timer.C
@@ -122,4 +118,19 @@ func (s *RateLimitState) Update(config *Config, update UpdateContainer, callback
 	}(timer, *callbackContext)
 
 	return newResetTime
+}
+
+func (s *RateLimitState) storeNewResetTime(config *Config, category ResourceCategory, callbackContext *CallbackContext, newResetTime *SecondsSinceEpoch) *AtomicTime {
+	sharedResetTime, exists := s.resetTimeMap[category]
+	if !exists {
+		// XXX: there is no point in adding it as a new category to the map,
+		// 		because we will not detect it anyway. so just trigger and continue.
+		config.TriggerUnknownCategory(callbackContext)
+		return nil
+	}
+
+	// XXX: should hold a ref to the timer to free resources early on-demand.
+	//      please open an issue if you actually need it.
+	sharedResetTime.Store(newResetTime)
+	return sharedResetTime
 }
