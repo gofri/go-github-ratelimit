@@ -103,7 +103,7 @@ See [example/advanced.go](example/advanced.go) for a runnable example.
 
 ## Migration (V1 => V2)
 
-The migraiton from v1 to v2 is relatively straight-forward once you check out the examples.  
+The migration from v1 to v2 is relatively straight-forward once you check out the examples.  
 Please open an issue if you have any trouble -  
 I'd be glad to help and add documetation per need.
 
