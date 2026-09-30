@@ -58,8 +58,33 @@ func WithBypassLimit() Option {
 // WithSleepUntilReset is used to flag that the rate limiter shall sleep until the reset time.
 // This is useful for testing, long-running offline applications, etc.
 // Note: it is using the LimitDetectedCallback, so it will not be otherwise called.
+// Note: the request that detected the limit still fails, and concurrent requests
+// are prevented without sleeping. Use WithRetryAfterReset to wait and continue.
 func WithSleepUntilReset() Option {
 	return WithLimitDetectedCallback(func(ctx *CallbackContext) {
 		time.Sleep(time.Until(*ctx.ResetTime))
 	})
+}
+
+// WithRetryAfterReset makes the round tripper wait for the rate limit to reset
+// and then send the request, instead of returning an error. It applies both to
+// the request that detects the limit and to any request prevented while the
+// limit is in force, so a caller with requests in flight sees them all complete
+// rather than one sleeping while the rest fail.
+//
+// The wait honours the request's context: a cancelled or expired context ends
+// it and returns the context's error. Give long waits a context deadline if the
+// caller has one, since a reset can be an hour away. A request carrying a body
+// that cannot be rewound is not retried, since resending it is not safe.
+//
+// A limit that outlasts several waits is reported as an error rather than
+// waited on indefinitely, and WithBypassLimit takes precedence: a caller asking
+// for no request to be prevented gets the request sent rather than delayed.
+//
+// Unlike WithSleepUntilReset it does not occupy the LimitDetectedCallback, so a
+// caller can still be told when a limit is reached.
+func WithRetryAfterReset() Option {
+	return func(c *Config) {
+		c.retryAfterReset = true
+	}
 }
