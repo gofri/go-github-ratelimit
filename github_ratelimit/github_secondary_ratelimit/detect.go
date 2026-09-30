@@ -62,12 +62,9 @@ func isSecondaryRateLimit(resp *http.Response) bool {
 		return false
 	}
 
-	// a primary rate limit
-	if remaining, ok := httpHeaderIntValue(resp.Header, HeaderXRateLimitRemaining); ok && remaining == 0 {
-		return false
-	}
-
-	// an authentic HTTP response (not a primary rate limit)
+	// GitHub sends `x-ratelimit-remaining: 0` on some secondary rate limits, so
+	// that header cannot tell the two apart and the body has to decide.
+	// https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits
 	defer resp.Body.Close()
 	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -125,9 +122,14 @@ func parseRetryAfter(header http.Header) *time.Time {
 }
 
 // parseXRateLimitReset parses the GitHub API response header in case a x-ratelimit-reset is returned.
-// to avoid handling primary rate limits (which are categorized),
-// we only handle x-ratelimit-reset in case the primary rate limit is not reached.
+// A response that also reports no requests remaining carries the primary
+// window's reset, which can be an hour away - far longer than a secondary limit
+// asks to be waited out. Such a response is left to `retry-after` alone.
 func parseXRateLimitReset(resp *http.Response) *time.Time {
+	if remaining, ok := httpHeaderIntValue(resp.Header, HeaderXRateLimitRemaining); ok && remaining == 0 {
+		return nil
+	}
+
 	secondsSinceEpoch, ok := httpHeaderIntValue(resp.Header, HeaderXRateLimitReset)
 	if !ok || secondsSinceEpoch <= 0 {
 		return nil

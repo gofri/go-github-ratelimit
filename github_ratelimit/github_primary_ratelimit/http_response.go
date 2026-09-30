@@ -2,10 +2,13 @@ package github_primary_ratelimit
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"slices"
 	"strconv"
+
+	"github.com/gofri/go-github-ratelimit/v2/github_ratelimit/github_secondary_ratelimit"
 )
 
 // ParsedResponse is a wrapper around http.Response that provides additional functionality.
@@ -56,7 +59,38 @@ func (p ParsedResponse) limitReached() bool {
 	if remaining := p.getHeader(ResponseHeaderKeyRemaining); remaining != "0" {
 		return false
 	}
+	// GitHub sends `x-ratelimit-remaining: 0` on some secondary rate limits too,
+	// so the status and that header together do not tell the two apart. The body
+	// does. Arming the category on a secondary limit blocks every request in it
+	// until the hourly reset, for a limit that asks for a backoff of seconds.
+	// https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits
+	if p.isSecondaryRateLimit() {
+		return false
+	}
 	return true
+}
+
+// isSecondaryRateLimit reports whether the response says it is a secondary rate
+// limit. The body is restored so that whoever handles the response next still
+// has it.
+func (p ParsedResponse) isSecondaryRateLimit() bool {
+	if p.resp.Body == nil {
+		return false
+	}
+
+	rawBody, err := io.ReadAll(p.resp.Body)
+	p.resp.Body.Close()
+	p.resp.Body = io.NopCloser(bytes.NewReader(rawBody))
+	if err != nil {
+		return false
+	}
+
+	var body github_secondary_ratelimit.SecondaryRateLimitBody
+	if err := json.Unmarshal(rawBody, &body); err != nil {
+		return false
+	}
+
+	return body.IsSecondaryRateLimit()
 }
 
 func (p ParsedResponse) getHeader(key ResponseHeaderKey) string {
