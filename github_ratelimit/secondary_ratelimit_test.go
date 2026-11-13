@@ -231,23 +231,25 @@ func TestTotalSleepLimit(t *testing.T) {
 	}
 }
 
-func TestXRateLimit(t *testing.T) {
+func TestXRateLimitResetIgnored(t *testing.T) {
 	t.Parallel()
 	const every = 1 * time.Second
-	const sleep = 1 * time.Second
+	// x-ratelimit-reset is the primary window's reset, which can be up to an hour away
+	const sleep = 30 * time.Minute
 
-	slept := false
-	callback := func(*github_secondary_ratelimit.CallbackContext) {
-		slept = true
+	var resetTime time.Time
+	onLimitExceeded := func(ctx *github_secondary_ratelimit.CallbackContext) {
+		resetTime = *ctx.ResetTime
 	}
 
-	// test sleep is short enough
 	i := github_ratelimit_test.SetupInjecterWithOptions(t, github_ratelimit_test.RateLimitInjecterOptions{
 		Every:             every,
 		InjectionDuration: sleep,
 		UseXRateLimit:     true,
 	}, nil)
-	c := github_ratelimit_test.NewSecondaryClient(i, github_secondary_ratelimit.WithLimitDetectedCallback(callback))
+	// a zero single sleep limit reports the computed sleep without sleeping it
+	c := github_ratelimit_test.NewSecondaryClient(i,
+		github_secondary_ratelimit.WithSingleSleepLimit(0, onLimitExceeded))
 
 	// initialize injecter timing
 	_, _ = c.Get("/")
@@ -258,8 +260,12 @@ func TestXRateLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slept {
-		t.Fatal(slept)
+	if resetTime.IsZero() {
+		t.Fatal("secondary rate limit not detected")
+	}
+	// without retry-after, GitHub asks to wait at least one minute
+	if got, want := time.Until(resetTime), time.Minute; got > want || got < want-5*time.Second {
+		t.Fatal(got, want)
 	}
 }
 
