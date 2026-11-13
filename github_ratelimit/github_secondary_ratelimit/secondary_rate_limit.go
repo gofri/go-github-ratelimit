@@ -63,7 +63,30 @@ func (t *SecondaryRateLimiter) RoundTrip(request *http.Request) (*http.Response,
 		return resp, nil
 	}
 
-	return t.RoundTrip(request)
+	retry, ok := rewindBody(request)
+	if !ok {
+		return resp, nil
+	}
+
+	return t.RoundTrip(retry)
+}
+
+// rewindBody returns a copy of the request with a fresh body, since the base RoundTripper consumed it.
+// It reports false if the body cannot be read again, so a truncated body is never sent.
+func rewindBody(request *http.Request) (*http.Request, bool) {
+	if request.Body == nil || request.Body == http.NoBody {
+		return request, true
+	}
+	if request.GetBody == nil {
+		return nil, false
+	}
+	body, err := request.GetBody()
+	if err != nil {
+		return nil, false
+	}
+	retry := request.Clone(request.Context())
+	retry.Body = body
+	return retry, true
 }
 
 func (t *SecondaryRateLimiter) getRequestConfig(request *http.Request) *Config {
