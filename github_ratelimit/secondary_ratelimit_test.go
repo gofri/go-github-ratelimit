@@ -3,7 +3,10 @@ package github_ratelimit
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -461,4 +464,72 @@ func TestRequestConfigOverride(t *testing.T) {
 		t.Fatal(slept, exceeded)
 	}
 
+}
+
+// newRetryBodyServer limits the first request, then accepts only requests that carry the full body.
+func newRetryBodyServer(body string, attempts *atomic.Int32) *httptest.Server {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, err := io.ReadAll(r.Body)
+		if attempts.Add(1) == 1 {
+			w.Header().Set(github_secondary_ratelimit.HeaderRetryAfter, "1")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message": "You have exceeded a secondary rate limit"}`))
+			return
+		}
+		if err != nil || string(got) != body {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	// over HTTP/2, a consumed body is sent as empty instead of failing the request
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	return server
+}
+
+func TestRetryResendsBody(t *testing.T) {
+	t.Parallel()
+	const body = `{"body": "a comment"}`
+
+	var attempts atomic.Int32
+	server := newRetryBodyServer(body, &attempts)
+	defer server.Close()
+
+	c := github_ratelimit_test.NewSecondaryClient(server.Client().Transport)
+	resp, err := c.Post(server.URL, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if got, want := resp.StatusCode, http.StatusCreated; got != want {
+		t.Fatal(got, want)
+	}
+}
+
+func TestRetrySkippedForUnrewindableBody(t *testing.T) {
+	t.Parallel()
+	const body = `{"body": "a comment"}`
+
+	var attempts atomic.Int32
+	server := newRetryBodyServer(body, &attempts)
+	defer server.Close()
+
+	// http.NewRequest sets GetBody only for known reader types
+	request, err := http.NewRequest(http.MethodPost, server.URL, io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := github_ratelimit_test.NewSecondaryClient(server.Client().Transport)
+	resp, err := c.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if got, want := resp.StatusCode, http.StatusForbidden; got != want {
+		t.Fatal(got, want)
+	}
+	if got, want := attempts.Load(), int32(1); got != want {
+		t.Fatal(got, want)
+	}
 }
